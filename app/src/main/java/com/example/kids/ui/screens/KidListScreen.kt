@@ -1,0 +1,206 @@
+package com.example.kids.ui.screens
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import com.example.kids.ui.theme.AppleBackground
+import com.example.kids.ui.theme.AppleCard
+
+data class KidListItemUi(
+    val id: Long,
+    val name: String,
+    val subtitle: String,
+    val avatarUri: String?
+)
+
+@Composable
+fun KidListScreen(
+    kids: List<KidListItemUi> = emptyList(),
+    onAddKid: () -> Unit,
+    onViewGrowth: (Long) -> Unit,
+    onViewMood: (Long) -> Unit,
+    onEditKid: (Long) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AppleBackground)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        Spacer(modifier = Modifier.height(32.dp))
+        Text(
+            text = "宝贝",
+            style = MaterialTheme.typography.headlineLarge
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "选择一个宝贝开始记录",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Button(onClick = onAddKid) {
+            Text(text = "添加宝贝")
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(bottom = 32.dp)
+        ) {
+            items(kids, key = { it.id }) { kid ->
+                KidCard(
+                    item = kid,
+                    onViewGrowth = { onViewGrowth(kid.id) },
+                    onViewMood = { onViewMood(kid.id) },
+                    onEdit = { onEditKid(kid.id) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun KidCard(
+    item: KidListItemUi,
+    onViewGrowth: () -> Unit,
+    onViewMood: () -> Unit,
+    onEdit: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = AppleCard
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 2.dp
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.Start
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                KidAvatarThumbnail(
+                    avatarUri = item.avatarUri,
+                    name = item.name
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = item.name,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = item.subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(onClick = onViewGrowth) {
+                        Text("成长记录")
+                    }
+                    OutlinedButton(onClick = onViewMood) {
+                        Text("乖不乖日历")
+                    }
+                }
+                TextButton(onClick = onEdit) {
+                    Text("编辑资料")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun KidAvatarThumbnail(
+    avatarUri: String?,
+    name: String
+) {
+    val initial = name.firstOrNull()?.toString() ?: "宝"
+
+    androidx.compose.material3.Surface(
+        modifier = Modifier
+            .size(56.dp)
+            .clip(CircleShape),
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+        shape = CircleShape
+    ) {
+        if (avatarUri.isNullOrBlank()) {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = initial,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        } else {
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(avatarUri)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = "宝贝头像",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        }
+    }
+}
+

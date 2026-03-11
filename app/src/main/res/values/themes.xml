@@ -1,0 +1,12 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Theme.Kids" parent="Theme.Material3.Light.NoActionBar">
+        <!-- Apple 风格：浅色、干净、留白多 -->
+        <item name="colorPrimary">@color/apple_primary</item>
+        <item name="colorSecondary">@color/apple_secondary</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/white</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+</resources>
+

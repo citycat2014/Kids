@@ -1,0 +1,9 @@
+<resources>
+    <!-- 柔和苹果风格配色 -->
+    <color name="apple_primary">#3C78FF</color>
+    <color name="apple_secondary">#3CC68A</color>
+    <color name="apple_background">#F5F5F7</color>
+    <color name="apple_card">#FFFFFFFF</color>
+    <color name="apple_divider">#1A000000</color>
+</resources>
+

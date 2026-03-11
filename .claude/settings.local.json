@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew assembleDebug --stacktrace)",
+      "Bash(./gradlew assembleDebug --no-daemon)",
+      "Bash(brew install openjdk@17)",
+      "Bash(./app/src)",
+      "Bash(chmod +x gradlew && ./gradlew assembleDebug)",
+      "Bash(export JAVA_HOME=/usr/local/opt/openjdk@17 && export PATH=\"$JAVA_HOME/bin:$PATH\" && ./gradlew assembleDebug)",
+      "Bash(export JAVA_HOME=/usr/local/opt/openjdk@17 && export PATH=\"$JAVA_HOME/bin:$PATH\" && ./gradlew clean)",
+      "Bash(chmod +x compilation_test.sh && ./compilation_test.sh)",
+      "Bash(rm -rf .gradle/ app/build/ && export JAVA_HOME=/usr/local/opt/openjdk@17 && export PATH=\"$JAVA_HOME/bin:$PATH\" && ./gradlew assembleDebug)",
+      "Bash(export JAVA_HOME=/usr/local/opt/openjdk@17 && export PATH=\"$JAVA_HOME/bin:$PATH\" && ./gradlew testDebugUnitTest)"
+    ]
+  }
+}
