@@ -40,4 +40,7 @@ class ExerciseRecordRepository(
 
     suspend fun deleteExercisesForKidOnDate(kidId: Long, date: LocalDate) =
         dao.deleteExercisesForKidOnDate(kidId, date)
+
+    fun observeAllExercisesForDate(date: LocalDate): Flow<List<ExerciseRecordEntity>> =
+        dao.observeAllExercisesForDate(date)
 }

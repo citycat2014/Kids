@@ -13,7 +13,7 @@ import com.example.kids.ui.screens.TodaySummary
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
@@ -29,36 +29,43 @@ class KidListViewModel(application: Application) : AndroidViewModel(application)
 
     init {
         viewModelScope.launch {
-            kidRepository.observeKids()
-                .collect { list ->
-                    val today = LocalDate.now()
-                    val uiItems = list.map { entity ->
-                        // Get today's mood and exercise
-                        val todayMood = moodRepository.getMoodForKidOnDate(entity.id, today)
-                        val todayExercises = exerciseRepository.getExercisesForKidOnDate(entity.id, today)
+            val today = LocalDate.now()
 
-                        val mood = todayMood?.let { KidMood.fromInt(it.mood) }
-                        val totalExerciseMinutes = todayExercises.sumOf { it.durationMinutes }
+            // Combine kids, moods, and exercises to refresh when any changes
+            combine(
+                kidRepository.observeKids(),
+                moodRepository.observeAllMoodsForDate(today),
+                exerciseRepository.observeAllExercisesForDate(today)
+            ) { kids, moods, exercises ->
+                val moodMap = moods.associateBy { it.kidId }
+                val exerciseMap = exercises.groupBy { exercise ->
+                    moods.find { it.id == exercise.moodRecordId }?.kidId
+                }.filterKeys { it != null }.mapKeys { it.key!! }
 
-                        val todaySummary = if (mood != null || totalExerciseMinutes > 0) {
-                            TodaySummary(
-                                mood = mood,
-                                totalExerciseMinutes = totalExerciseMinutes
-                            )
-                        } else {
-                            null
-                        }
+                kids.map { entity ->
+                    val mood = moodMap[entity.id]?.let { KidMood.fromInt(it.mood) }
+                    val totalExerciseMinutes = exerciseMap[entity.id]?.sumOf { it.durationMinutes } ?: 0
 
-                        KidListItemUi(
-                            id = entity.id,
-                            name = entity.name.ifBlank { "未命名宝贝" },
-                            subtitle = "点击【成长记录】或【乖不乖日历】查看数据",
-                            avatarUri = entity.avatarUri,
-                            todaySummary = todaySummary
+                    val todaySummary = if (mood != null || totalExerciseMinutes > 0) {
+                        TodaySummary(
+                            mood = mood,
+                            totalExerciseMinutes = totalExerciseMinutes
                         )
+                    } else {
+                        null
                     }
-                    _kids.value = uiItems
+
+                    KidListItemUi(
+                        id = entity.id,
+                        name = entity.name.ifBlank { "未命名宝贝" },
+                        subtitle = "点击【成长记录】或【乖不乖日历】查看数据",
+                        avatarUri = entity.avatarUri,
+                        todaySummary = todaySummary
+                    )
                 }
+            }.collect { uiItems ->
+                _kids.value = uiItems
+            }
         }
     }
 

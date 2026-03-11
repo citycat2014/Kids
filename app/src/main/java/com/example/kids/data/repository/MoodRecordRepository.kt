@@ -36,5 +36,8 @@ class MoodRecordRepository(
 
     suspend fun getMoodForKidOnDate(kidId: Long, date: LocalDate): MoodRecordEntity? =
         dao.getMoodForKidOnDate(kidId, date)
+
+    fun observeAllMoodsForDate(date: LocalDate): Flow<List<MoodRecordEntity>> =
+        dao.observeAllMoodsForDate(date)
 }
 

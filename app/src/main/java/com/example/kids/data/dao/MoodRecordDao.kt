@@ -51,5 +51,8 @@ interface MoodRecordDao {
 
     @Query("SELECT * FROM mood_records WHERE kidId = :kidId AND date = :date LIMIT 1")
     suspend fun getMoodForKidOnDate(kidId: Long, date: LocalDate): MoodRecordEntity?
+
+    @Query("SELECT * FROM mood_records WHERE date = :date")
+    fun observeAllMoodsForDate(date: LocalDate): Flow<List<MoodRecordEntity>>
 }
 

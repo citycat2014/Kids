@@ -69,4 +69,13 @@ interface ExerciseRecordDao {
         """
     )
     suspend fun deleteExercisesForKidOnDate(kidId: Long, date: java.time.LocalDate)
+
+    @Query(
+        """
+        SELECT er.* FROM exercise_records er
+        INNER JOIN mood_records mr ON er.moodRecordId = mr.id
+        WHERE mr.date = :date
+        """
+    )
+    fun observeAllExercisesForDate(date: java.time.LocalDate): Flow<List<ExerciseRecordEntity>>
 }
