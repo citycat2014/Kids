@@ -4,7 +4,9 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.kids.data.db.KidsDatabase
+import com.example.kids.data.model.ExerciseRecordEntity
 import com.example.kids.data.model.MoodRecordEntity
+import com.example.kids.data.repository.ExerciseRecordRepository
 import com.example.kids.data.repository.MoodRecordRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,24 +38,25 @@ enum class ExerciseType(val displayName: String) {
 }
 
 data class ExerciseInfo(
-    val type: ExerciseType?,
-    val durationMinutes: Int?
+    val id: Long,
+    val type: ExerciseType,
+    val durationMinutes: Int
 )
 
 data class MoodCalendarUiState(
     val kidId: Long = 0L,
     val month: YearMonth = YearMonth.now(),
     val moods: Map<LocalDate, KidMood> = emptyMap(),
-    val exercises: Map<LocalDate, ExerciseInfo> = emptyMap()
+    val exercises: Map<LocalDate, List<ExerciseInfo>> = emptyMap()
 )
 
 class MoodCalendarViewModel(
     application: Application
 ) : AndroidViewModel(application) {
 
-    private val repository = MoodRecordRepository(
-        KidsDatabase.getInstance(application).moodRecordDao()
-    )
+    private val database = KidsDatabase.getInstance(application)
+    private val moodRepository = MoodRecordRepository(database.moodRecordDao())
+    private val exerciseRepository = ExerciseRecordRepository(database.exerciseRecordDao())
 
     private val _uiState = MutableStateFlow(MoodCalendarUiState())
     val uiState: StateFlow<MoodCalendarUiState> = _uiState.asStateFlow()
@@ -78,21 +81,35 @@ class MoodCalendarViewModel(
 
         observeJob?.cancel()
         observeJob = viewModelScope.launch {
-            repository.observeMoodForKidInRange(state.kidId, start, end)
-                .collect { list ->
-                    _uiState.update { current ->
-                        current.copy(
-                            moods = list.associate { entity ->
-                                entity.date to (KidMood.fromInt(entity.mood) ?: KidMood.OK)
-                            },
-                            exercises = list.associate { entity ->
-                                entity.date to ExerciseInfo(
-                                    type = entity.exerciseType?.let { typeStr ->
-                                        ExerciseType.entries.firstOrNull { it.displayName == typeStr }
-                                    },
-                                    durationMinutes = entity.exerciseDurationMinutes
+            // Combine mood and exercise data
+            moodRepository.observeMoodForKidInRange(state.kidId, start, end)
+                .collect { moodList ->
+                    val exercises = exerciseRepository.getExercisesForKidInRange(state.kidId, start, end)
+
+                    // Group exercises by date using mood records
+                    val moodRecordMap = moodList.associateBy { it.id }
+                    val exerciseByDate = exercises.groupBy { exercise ->
+                        moodRecordMap[exercise.moodRecordId]?.date
+                    }.filterKeys { it != null }
+                        .mapKeys { it.key!! }
+                        .mapValues { (_, exercisesForDate) ->
+                            exercisesForDate.map { entity ->
+                                ExerciseInfo(
+                                    id = entity.id,
+                                    type = ExerciseType.entries.firstOrNull {
+                                        it.displayName == entity.type
+                                    } ?: ExerciseType.OTHER,
+                                    durationMinutes = entity.durationMinutes
                                 )
                             }
+                        }
+
+                    _uiState.update { current ->
+                        current.copy(
+                            moods = moodList.associate { entity ->
+                                entity.date to (KidMood.fromInt(entity.mood) ?: KidMood.OK)
+                            },
+                            exercises = exerciseByDate
                         )
                     }
                 }
@@ -109,7 +126,7 @@ class MoodCalendarViewModel(
         if (state.kidId == 0L) return
 
         viewModelScope.launch {
-            val existingRecord = repository.getMoodForKidOnDate(state.kidId, date)
+            val existingRecord = moodRepository.getMoodForKidOnDate(state.kidId, date)
             val entity = MoodRecordEntity(
                 id = existingRecord?.id ?: 0L,
                 kidId = state.kidId,
@@ -119,7 +136,7 @@ class MoodCalendarViewModel(
                 exerciseType = existingRecord?.exerciseType,
                 exerciseDurationMinutes = existingRecord?.exerciseDurationMinutes
             )
-            repository.addOrUpdate(entity)
+            moodRepository.addOrUpdate(entity)
         }
     }
 
@@ -128,27 +145,94 @@ class MoodCalendarViewModel(
         if (state.kidId == 0L) return
 
         viewModelScope.launch {
-            repository.deleteForKidOnDate(state.kidId, date)
+            moodRepository.deleteForKidOnDate(state.kidId, date)
         }
     }
 
-    fun setExercise(date: LocalDate, type: ExerciseType?, durationMinutes: Int?) {
+    fun addExercise(date: LocalDate, type: ExerciseType, durationMinutes: Int) {
         val state = _uiState.value
         if (state.kidId == 0L) return
 
         viewModelScope.launch {
-            val existingRecord = repository.getMoodForKidOnDate(state.kidId, date)
-            val entity = MoodRecordEntity(
-                id = existingRecord?.id ?: 0L,
-                kidId = state.kidId,
-                date = date,
-                mood = existingRecord?.mood ?: KidMood.OK.value,
-                note = existingRecord?.note,
-                exerciseType = type?.displayName,
-                exerciseDurationMinutes = durationMinutes
+            // Get or create mood record for this date
+            var moodRecord = moodRepository.getMoodForKidOnDate(state.kidId, date)
+            if (moodRecord == null) {
+                // Create a default mood record if none exists
+                val newRecord = MoodRecordEntity(
+                    kidId = state.kidId,
+                    date = date,
+                    mood = KidMood.OK.value,
+                    note = null
+                )
+                val recordId = moodRepository.addOrUpdate(newRecord)
+                moodRecord = newRecord.copy(id = recordId)
+            }
+
+            // Add exercise
+            val exercise = ExerciseRecordEntity(
+                moodRecordId = moodRecord.id,
+                type = type.displayName,
+                durationMinutes = durationMinutes
             )
-            repository.addOrUpdate(entity)
+            exerciseRepository.addExercise(exercise)
+            refreshExerciseData()
         }
+    }
+
+    fun removeExercise(exerciseId: Long) {
+        viewModelScope.launch {
+            exerciseRepository.deleteExercise(exerciseId)
+            refreshExerciseData()
+        }
+    }
+
+    fun updateExercise(exerciseId: Long, type: ExerciseType, durationMinutes: Int) {
+        viewModelScope.launch {
+            exerciseRepository.updateExercise(exerciseId, type.displayName, durationMinutes)
+            refreshExerciseData()
+        }
+    }
+
+    private suspend fun refreshExerciseData() {
+        val state = _uiState.value
+        if (state.kidId == 0L) return
+
+        val month = state.month
+        val start = month.atDay(1)
+        val end = month.atEndOfMonth()
+
+        val moodList = moodRepository.getMoodForKidInRange(state.kidId, start, end)
+        val exercises = exerciseRepository.getExercisesForKidInRange(state.kidId, start, end)
+
+        val moodRecordMap = moodList.associateBy { it.id }
+        val exerciseByDate = exercises.groupBy { exercise ->
+            moodRecordMap[exercise.moodRecordId]?.date
+        }.filterKeys { it != null }
+            .mapKeys { it.key!! }
+            .mapValues { (_, exercisesForDate) ->
+                exercisesForDate.map { entity ->
+                    ExerciseInfo(
+                        id = entity.id,
+                        type = ExerciseType.entries.firstOrNull {
+                            it.displayName == entity.type
+                        } ?: ExerciseType.OTHER,
+                        durationMinutes = entity.durationMinutes
+                    )
+                }
+            }
+
+        _uiState.update { current ->
+            current.copy(
+                moods = moodList.associate { entity ->
+                    entity.date to (KidMood.fromInt(entity.mood) ?: KidMood.OK)
+                },
+                exercises = exerciseByDate
+            )
+        }
+    }
+
+    fun getTotalExerciseDuration(date: LocalDate): Int {
+        return _uiState.value.exercises[date]?.sumOf { it.durationMinutes } ?: 0
     }
 }
 

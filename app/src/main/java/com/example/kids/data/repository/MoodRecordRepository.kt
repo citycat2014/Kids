@@ -16,6 +16,13 @@ class MoodRecordRepository(
     ): Flow<List<MoodRecordEntity>> =
         dao.observeMoodForKidInRange(kidId, startDate, endDate)
 
+    suspend fun getMoodForKidInRange(
+        kidId: Long,
+        startDate: LocalDate,
+        endDate: LocalDate
+    ): List<MoodRecordEntity> =
+        dao.getMoodForKidInRange(kidId, startDate, endDate)
+
     suspend fun addOrUpdate(record: MoodRecordEntity): Long =
         if (record.id == 0L) {
             dao.insert(record)
