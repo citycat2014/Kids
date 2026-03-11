@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.example.kids.ui.mood.KidMood
 import com.example.kids.ui.theme.AppleBackground
 import com.example.kids.ui.theme.AppleCard
 
@@ -38,7 +39,13 @@ data class KidListItemUi(
     val id: Long,
     val name: String,
     val subtitle: String,
-    val avatarUri: String?
+    val avatarUri: String?,
+    val todaySummary: TodaySummary? = null
+)
+
+data class TodaySummary(
+    val mood: KidMood? = null,
+    val totalExerciseMinutes: Int = 0
 )
 
 @Composable
@@ -136,6 +143,47 @@ private fun KidCard(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
+                    // Today summary chips
+                    item.todaySummary?.let { summary ->
+                        if (summary.mood != null || summary.totalExerciseMinutes > 0) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                summary.mood?.let { mood ->
+                                    val (moodText, moodColor) = when (mood) {
+                                        KidMood.GOOD -> "乖" to androidx.compose.ui.graphics.Color(0xFF4CAF50)
+                                        KidMood.OK -> "一般" to androidx.compose.ui.graphics.Color(0xFFFFC107)
+                                        KidMood.BAD -> "不乖" to androidx.compose.ui.graphics.Color(0xFFF44336)
+                                    }
+                                    androidx.compose.material3.Surface(
+                                        color = moodColor.copy(alpha = 0.15f),
+                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp)
+                                    ) {
+                                        Text(
+                                            text = moodText,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = moodColor,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                                if (summary.totalExerciseMinutes > 0) {
+                                    androidx.compose.material3.Surface(
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp)
+                                    ) {
+                                        Text(
+                                            text = "运动${summary.totalExerciseMinutes}分钟",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -153,7 +201,7 @@ private fun KidCard(
                         Text("成长记录")
                     }
                     OutlinedButton(onClick = onViewMood) {
-                        Text("乖不乖日历")
+                        Text("成长日历")
                     }
                 }
                 TextButton(onClick = onEdit) {

@@ -26,6 +26,20 @@ interface MoodRecordDao {
         endDate: LocalDate
     ): Flow<List<MoodRecordEntity>>
 
+    @Query(
+        """
+        SELECT * FROM mood_records
+        WHERE kidId = :kidId
+        AND date BETWEEN :startDate AND :endDate
+        ORDER BY date ASC
+        """
+    )
+    suspend fun getMoodForKidInRange(
+        kidId: Long,
+        startDate: LocalDate,
+        endDate: LocalDate
+    ): List<MoodRecordEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(record: MoodRecordEntity): Long
 
@@ -37,5 +51,8 @@ interface MoodRecordDao {
 
     @Query("SELECT * FROM mood_records WHERE kidId = :kidId AND date = :date LIMIT 1")
     suspend fun getMoodForKidOnDate(kidId: Long, date: LocalDate): MoodRecordEntity?
+
+    @Query("SELECT * FROM mood_records WHERE date = :date")
+    fun observeAllMoodsForDate(date: LocalDate): Flow<List<MoodRecordEntity>>
 }
 
