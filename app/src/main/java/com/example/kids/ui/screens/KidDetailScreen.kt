@@ -31,6 +31,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,16 +43,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.example.kids.ui.components.DatePickerFieldWithClear
 import com.example.kids.ui.kid.KidDetailUiState
 import com.example.kids.ui.kid.KidDetailViewModel
 import com.example.kids.ui.theme.AppleBackground
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.File
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.time.format.DateTimeParseException
 
 @Composable
 fun KidDetailScreen(
@@ -62,6 +60,7 @@ fun KidDetailScreen(
 ) {
     val vm: KidDetailViewModel = viewModel()
     val state = vm.uiState.collectAsState()
+    val coroutineScope = rememberCoroutineScope()
 
     // 简单加载（幂等调用）:
     LaunchedEffect(kidId) {
@@ -97,7 +96,7 @@ fun KidDetailScreen(
             cameraLauncher.launch(uri)
         },
         onSave = {
-            CoroutineScope(Dispatchers.Main).launch {
+            coroutineScope.launch {
                 vm.save()
                 onFinished()
             }
@@ -120,12 +119,6 @@ private fun KidDetailContent(
     onOpenMood: (Long) -> Unit
 ) {
     var showAvatarSourceDialog by remember { mutableStateOf(false) }
-    var birthdayText by remember(state.birthday) {
-        mutableStateOf(
-            state.birthday?.format(DateTimeFormatter.ISO_LOCAL_DATE).orEmpty()
-        )
-    }
-    var birthdayError by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier
@@ -184,36 +177,12 @@ private fun KidDetailContent(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        OutlinedTextField(
-            modifier = Modifier.fillMaxWidth(),
-            value = birthdayText,
-            onValueChange = { text ->
-                birthdayText = text
-                if (text.isBlank()) {
-                    birthdayError = null
-                    onBirthdayChange(null)
-                } else {
-                    try {
-                        val date = LocalDate.parse(text, DateTimeFormatter.ISO_LOCAL_DATE)
-                        birthdayError = null
-                        onBirthdayChange(date)
-                    } catch (e: DateTimeParseException) {
-                        birthdayError = "日期格式应为 YYYY-MM-DD"
-                    }
-                }
-            },
-            label = { Text("生日 (YYYY-MM-DD，可选)") },
-            singleLine = true,
-            isError = birthdayError != null
+        DatePickerFieldWithClear(
+            value = state.birthday,
+            onValueChange = onBirthdayChange,
+            label = { Text("生日（可选）") },
+            placeholder = "点击选择生日"
         )
-        if (birthdayError != null) {
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = birthdayError.orEmpty(),
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall
-            )
-        }
 
         Spacer(modifier = Modifier.height(24.dp))
 

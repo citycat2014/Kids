@@ -23,6 +23,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -108,7 +109,8 @@ private fun KidCard(
 ) {
     Card(
         modifier = Modifier
-            .fillMaxWidth(),
+            .fillMaxWidth()
+            .clip(CardDefaults.shape),
         colors = CardDefaults.cardColors(
             containerColor = AppleCard
         ),
@@ -197,14 +199,23 @@ private fun KidCard(
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    OutlinedButton(onClick = onViewGrowth) {
+                    OutlinedButton(
+                        onClick = onViewGrowth,
+                        contentPadding = androidx.compose.material3.ButtonDefaults.ButtonWithIconContentPadding
+                    ) {
                         Text("成长记录")
                     }
-                    OutlinedButton(onClick = onViewMood) {
+                    OutlinedButton(
+                        onClick = onViewMood,
+                        contentPadding = androidx.compose.material3.ButtonDefaults.ButtonWithIconContentPadding
+                    ) {
                         Text("成长日历")
                     }
                 }
-                TextButton(onClick = onEdit) {
+                TextButton(
+                    onClick = onEdit,
+                    contentPadding = androidx.compose.material3.ButtonDefaults.ButtonWithIconContentPadding
+                ) {
                     Text("编辑资料")
                 }
             }
@@ -219,11 +230,24 @@ private fun KidAvatarThumbnail(
 ) {
     val initial = name.firstOrNull()?.toString() ?: "宝"
 
+    // 根据名字生成一致的柔和背景色
+    val backgroundColor = remember(name) {
+        val colors = listOf(
+            androidx.compose.ui.graphics.Color(0xFFE3F2FD), // 蓝色系
+            androidx.compose.ui.graphics.Color(0xFFFFEBEE), // 粉色系
+            androidx.compose.ui.graphics.Color(0xFFE8F5E9), // 绿色系
+            androidx.compose.ui.graphics.Color(0xFFEDE7F6), // 紫色系
+            androidx.compose.ui.graphics.Color(0xFFF6E5C4), // 橙色系
+            androidx.compose.ui.graphics.Color(0xFFE0F2F1)  // 青色系
+        )
+        colors[name.lowercase().firstOrNull()?.code?.rem(colors.size.toInt()) ?: 0]
+    }
+
     androidx.compose.material3.Surface(
         modifier = Modifier
             .size(56.dp)
             .clip(CircleShape),
-        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+        color = backgroundColor,
         shape = CircleShape
     ) {
         if (avatarUri.isNullOrBlank()) {
@@ -235,7 +259,7 @@ private fun KidAvatarThumbnail(
                 Text(
                     text = initial,
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                 )
             }
         } else {

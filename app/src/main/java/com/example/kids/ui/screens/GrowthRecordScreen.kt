@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
@@ -47,6 +49,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -56,62 +60,19 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.example.kids.ui.components.DatePickerField
 import com.example.kids.ui.growth.GrowthRecordUi
 import com.example.kids.ui.growth.GrowthRecordViewModel
 import com.example.kids.ui.theme.AppleBackground
+import com.example.kids.ui.utils.LocationHelper
 import com.example.kids.ui.utils.collectAsStateWithLifecycleSafe
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.collect
 import java.io.File
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import java.time.format.DateTimeParseException
-
-// Helper function to get current location
-private fun getCurrentLocation(context: Context, onLocationResult: (Double?, Double?) -> Unit) {
-    try {
-        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
-
-        // Check if GPS is enabled
-        val gpsEnabled = locationManager.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER)
-        val networkEnabled = locationManager.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER)
-
-        if (!gpsEnabled && !networkEnabled) {
-            onLocationResult(null, null)
-            return
-        }
-
-        // Get last known location (faster)
-        var bestLocation: android.location.Location? = null
-        val minTime = 2000L // 2 seconds
-        val minDistance = 10f // 10 meters
-
-        if (gpsEnabled) {
-            val gpsLocation = locationManager.getLastKnownLocation(android.location.LocationManager.GPS_PROVIDER)
-            if (gpsLocation != null && gpsLocation.time > System.currentTimeMillis() - minTime) {
-                bestLocation = gpsLocation
-            }
-        }
-
-        if (networkEnabled && bestLocation == null) {
-            val networkLocation = locationManager.getLastKnownLocation(android.location.LocationManager.NETWORK_PROVIDER)
-            if (networkLocation != null && networkLocation.time > System.currentTimeMillis() - minTime) {
-                bestLocation = networkLocation
-            }
-        }
-
-        if (bestLocation != null) {
-            onLocationResult(bestLocation.latitude, bestLocation.longitude)
-        } else {
-            onLocationResult(null, null)
-        }
-    } catch (e: Exception) {
-        onLocationResult(null, null)
-    }
-}
 
 @Composable
 fun GrowthRecordScreen(
@@ -249,6 +210,7 @@ private fun GrowthRecordContent(
                 if (existingSameDate != null && updated.id == 0L) {
                     pendingRecord = updated
                     duplicateTarget = existingSameDate
+                    isDialogOpen = false
                     showDuplicateDialog = true
                 } else {
                     onSaveRecord(updated)
@@ -277,7 +239,6 @@ private fun GrowthRecordContent(
                             base.copy(id = target.id)
                         )
                         showDuplicateDialog = false
-                        isDialogOpen = false
                         pendingRecord = null
                         duplicateTarget = null
                     }
@@ -289,7 +250,9 @@ private fun GrowthRecordContent(
                 TextButton(
                     onClick = {
                         showDuplicateDialog = false
-                        // 保留编辑弹窗，用户可以修改日期或内容
+                        pendingRecord = null
+                        duplicateTarget = null
+                        isDialogOpen = true
                     }
                 ) {
                     Text("取消")
@@ -308,14 +271,24 @@ private fun GrowthRecordRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .shadow(
+                elevation = 2.dp,
+                shape = RoundedCornerShape(12.dp),
+                ambientColor = Color(0x1A000000),
+                spotColor = Color(0x1A000000)
+            )
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFFF9F9F9))
+            .clickable { /* 预留点击事件 */ }
+            .padding(vertical = 12.dp, horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Column {
             Text(
                 text = record.date.toString(),
-                style = MaterialTheme.typography.bodyMedium
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
             )
             Text(
                 text = buildString {
@@ -324,17 +297,17 @@ private fun GrowthRecordRow(
                     if (isEmpty()) append("未填写身高体重")
                 },
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
             )
             if (!record.note.isNullOrBlank()) {
                 Text(
                     text = record.note ?: "",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                 )
             }
             if (!record.photoUri.isNullOrBlank()) {
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(record.photoUri)
@@ -343,17 +316,29 @@ private fun GrowthRecordRow(
                     contentDescription = "记录照片",
                     modifier = Modifier
                         .height(80.dp)
-                        .fillMaxWidth(),
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp)),
                     contentScale = ContentScale.Crop
                 )
             }
         }
         Row {
-            IconButton(onClick = { onEdit(record) }) {
-                Icon(Icons.Default.Edit, contentDescription = "编辑")
+            IconButton(
+                onClick = { onEdit(record) },
+                modifier = Modifier.padding(end = 8.dp)
+            ) {
+                Icon(
+                    Icons.Default.Edit,
+                    contentDescription = "编辑",
+                    tint = MaterialTheme.colorScheme.primary
+                )
             }
             IconButton(onClick = onDelete) {
-                Icon(Icons.Default.Delete, contentDescription = "删除")
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "删除",
+                    tint = MaterialTheme.colorScheme.error
+                )
             }
         }
     }
@@ -366,11 +351,7 @@ private fun GrowthRecordDialog(
     onDismiss: () -> Unit,
     onConfirm: (GrowthRecordUi) -> Unit
 ) {
-    var dateText by remember {
-        mutableStateOf(
-            (initial?.date ?: LocalDate.now()).format(DateTimeFormatter.ISO_LOCAL_DATE)
-        )
-    }
+    var selectedDate by remember { mutableStateOf(initial?.date ?: LocalDate.now()) }
     var heightText by remember { mutableStateOf(initial?.heightCm?.toString().orEmpty()) }
     var weightText by remember { mutableStateOf(initial?.weightKg?.toString().orEmpty()) }
     var noteText by remember { mutableStateOf(initial?.note.orEmpty()) }
@@ -382,20 +363,24 @@ private fun GrowthRecordDialog(
     var currentLongitude by remember { mutableStateOf<Double?>(initial?.longitude) }
     var latText by remember { mutableStateOf(initial?.latitude?.toString().orEmpty()) }
     var lngText by remember { mutableStateOf(initial?.longitude?.toString().orEmpty()) }
-    var hasLocationPermission by remember { mutableStateOf(false) }
     var locationError by remember { mutableStateOf<String?>(null) }
+    var isLoadingLocation by remember { mutableStateOf(false) }
+
+    val coroutineScope = rememberCoroutineScope()
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
-        hasLocationPermission = isGranted
         if (isGranted) {
-            getCurrentLocation(context) { lat, lng ->
-                currentLatitude = lat
-                currentLongitude = lng
-                latText = lat?.toString().orEmpty()
-                lngText = lng?.toString().orEmpty()
-                locationError = null
+            isLoadingLocation = true
+            coroutineScope.launch {
+                val result = LocationHelper.getCurrentLocation(context)
+                currentLatitude = result.latitude
+                currentLongitude = result.longitude
+                latText = result.latitude?.toString().orEmpty()
+                lngText = result.longitude?.toString().orEmpty()
+                locationError = if (!result.isValid) "无法获取位置信息" else null
+                isLoadingLocation = false
             }
         } else {
             locationError = "需要位置权限才能获取当前位置"
@@ -421,11 +406,10 @@ private fun GrowthRecordDialog(
         title = { Text(text = if (initial == null) "添加记录" else "编辑记录") },
         text = {
             Column {
-                OutlinedTextField(
-                    value = dateText,
-                    onValueChange = { dateText = it },
-                    label = { Text("日期 (YYYY-MM-DD)") },
-                    singleLine = true
+                DatePickerField(
+                    value = selectedDate,
+                    onValueChange = { selectedDate = it ?: LocalDate.now() },
+                    label = { Text("日期") }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
@@ -499,6 +483,15 @@ private fun GrowthRecordDialog(
                     )
                 }
 
+                // Loading indicator
+                if (isLoadingLocation) {
+                    Text(
+                        text = "正在获取位置...",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                }
+
                 // Buttons for location
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -508,7 +501,8 @@ private fun GrowthRecordDialog(
                         onClick = {
                             locationPermissionLauncher.launch(android.Manifest.permission.ACCESS_FINE_LOCATION)
                         },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        enabled = !isLoadingLocation
                     ) {
                         Text("获取当前位置")
                     }
@@ -585,13 +579,6 @@ private fun GrowthRecordDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    val date = try {
-                        LocalDate.parse(dateText, DateTimeFormatter.ISO_LOCAL_DATE)
-                    } catch (e: DateTimeParseException) {
-                        errorText = "日期格式不正确"
-                        return@TextButton
-                    }
-
                     val height = heightText.toFloatOrNull()
                     val weight = weightText.toFloatOrNull()
                     val note = noteText.ifBlank { null }
@@ -599,7 +586,7 @@ private fun GrowthRecordDialog(
                     onConfirm(
                         GrowthRecordUi(
                             id = initial?.id ?: 0L,
-                            date = date,
+                            date = selectedDate,
                             heightCm = height,
                             weightKg = weight,
                             note = note,

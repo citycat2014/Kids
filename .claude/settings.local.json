@@ -10,7 +10,18 @@
       "Bash(export JAVA_HOME=/usr/local/opt/openjdk@17 && export PATH=\"$JAVA_HOME/bin:$PATH\" && ./gradlew clean)",
       "Bash(chmod +x compilation_test.sh && ./compilation_test.sh)",
       "Bash(rm -rf .gradle/ app/build/ && export JAVA_HOME=/usr/local/opt/openjdk@17 && export PATH=\"$JAVA_HOME/bin:$PATH\" && ./gradlew assembleDebug)",
-      "Bash(export JAVA_HOME=/usr/local/opt/openjdk@17 && export PATH=\"$JAVA_HOME/bin:$PATH\" && ./gradlew testDebugUnitTest)"
+      "Bash(export JAVA_HOME=/usr/local/opt/openjdk@17 && export PATH=\"$JAVA_HOME/bin:$PATH\" && ./gradlew testDebugUnitTest)",
+      "Bash(./gradlew assembleDebug 2>&1)",
+      "Bash(export JAVA_HOME=\"/Applications/Android Studio.app/Contents/jbr/Contents/Home\" && ./gradlew build 2>&1)",
+      "Bash(export JAVA_HOME=\"/Applications/Android Studio.app/Contents/jbr/Contents/Home\" && ./gradlew assembleDebug 2>&1)",
+      "Bash(export JAVA_HOME=\"/Applications/Android Studio.app/Contents/jbr/Contents/Home\" && ./gradlew testDebugUnitTest 2>&1)",
+      "Bash(JAVA_HOME=\"/Applications/Android Studio.app/Contents/jbr/Contents/Home\" ./gradlew assembleDebug 2>&1)",
+      "Bash(git checkout -b feature/exercise-record-enhancement)",
+      "WebSearch",
+      "WebFetch(domain:www.chinapeace.org.cn)",
+      "Bash(./gradlew :app:testDebugUnitTest --no-daemon 2>&1 | tail -30)",
+      "Bash(./gradlew :app:compileDebugKotlin --no-daemon 2>&1 | tail -20)",
+      "Bash(./gradlew :app:testDebugUnitTest --no-daemon 2>&1 | tail -10)"
     ]
   }
 }

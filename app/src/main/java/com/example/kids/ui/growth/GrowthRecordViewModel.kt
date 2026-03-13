@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.kids.data.db.KidsDatabase
 import com.example.kids.data.model.GrowthRecordEntity
 import com.example.kids.data.repository.GrowthRecordRepository
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -40,12 +41,16 @@ class GrowthRecordViewModel(
     private val _uiState = MutableStateFlow(GrowthRecordUiState())
     val uiState: StateFlow<GrowthRecordUiState> = _uiState.asStateFlow()
 
+    private var observeJob: Job? = null
+
     fun load(kidId: Long) {
         if (kidId == 0L || kidId == _uiState.value.kidId) return
 
+        // 取消之前的 Flow 收集
+        observeJob?.cancel()
         _uiState.value = GrowthRecordUiState(kidId = kidId)
 
-        viewModelScope.launch {
+        observeJob = viewModelScope.launch {
             repository.observeRecordsForKid(kidId)
                 .collect { list ->
                     _uiState.update { state ->
@@ -66,6 +71,11 @@ class GrowthRecordViewModel(
                     }
                 }
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        observeJob?.cancel()
     }
 
     fun addOrUpdate(
