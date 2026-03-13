@@ -233,4 +233,64 @@ object GrowthStandard {
         if (birthday == null) return null
         return java.time.Period.between(birthday, recordDate).years.coerceAtLeast(0)
     }
+
+    /**
+     * 获取指定年龄和性别的身高标准数据
+     * @param gender 性别："男" 或 "女"
+     * @param ageInYears 年龄（岁），1-18
+     * @return 四个阈值：[矮小, 偏矮, 标准, 超高]，如果年龄无效返回null
+     */
+    fun getHeightStandards(gender: String, ageInYears: Int): List<Float>? {
+        val clampedAge = ageInYears.coerceIn(1, 18)
+        val isBoy = gender == "男"
+        val standards = if (isBoy) boyHeightStandards else girlHeightStandards
+        return standards[clampedAge]
+    }
+
+    /**
+     * 获取指定年龄和性别的体重标准数据
+     * @param gender 性别："男" 或 "女"
+     * @param ageInYears 年龄（岁），1-18
+     * @return 四个阈值：[偏瘦, 标准, 超重, 肥胖]，如果年龄无效返回null
+     */
+    fun getWeightStandards(gender: String, ageInYears: Int): List<Float>? {
+        val clampedAge = ageInYears.coerceIn(1, 18)
+        val isBoy = gender == "男"
+        val standards = if (isBoy) boyWeightStandards else girlWeightStandards
+        return standards[clampedAge]
+    }
+
+    /**
+     * 获取所有年龄段的身高标准数据
+     * @param gender 性别："男" 或 "女"
+     * @return Map<年龄, [矮小, 偏矮, 标准, 超高]>
+     */
+    fun getAllHeightStandards(gender: String): Map<Int, List<Float>> {
+        val isBoy = gender == "男"
+        return if (isBoy) boyHeightStandards else girlHeightStandards
+    }
+
+    /**
+     * 获取所有年龄段的体重标准数据
+     * @param gender 性别："男" 或 "女"
+     * @return Map<年龄, [偏瘦, 标准, 超重, 肥胖]>
+     */
+    fun getAllWeightStandards(gender: String): Map<Int, List<Float>> {
+        val isBoy = gender == "男"
+        return if (isBoy) boyWeightStandards else girlWeightStandards
+    }
+
+    /**
+     * 计算完整年龄文本（X岁X个月）
+     */
+    fun calculateAgeText(birthday: java.time.LocalDate?): String {
+        if (birthday == null) return "生日未设置"
+        val period = java.time.Period.between(birthday, java.time.LocalDate.now())
+        return when {
+            period.years > 0 && period.months > 0 -> "${period.years}岁${period.months}个月"
+            period.years > 0 -> "${period.years}岁"
+            period.months > 0 -> "${period.months}个月"
+            else -> "刚出生"
+        }
+    }
 }

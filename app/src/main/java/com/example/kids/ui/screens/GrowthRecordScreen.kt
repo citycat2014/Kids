@@ -27,6 +27,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -59,6 +61,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.kids.data.model.GrowthStandard
@@ -80,7 +83,8 @@ import java.time.format.DateTimeFormatter
 fun GrowthRecordScreen(
     kidId: Long,
     onBack: () -> Unit,
-    onOpenTimeline: (Long) -> Unit
+    onOpenTimeline: (Long) -> Unit,
+    onOpenStandard: (String, Int?) -> Unit = { _, _ -> }
 ) {
     val vm: GrowthRecordViewModel = viewModel()
     val state by vm.uiState
@@ -91,6 +95,11 @@ fun GrowthRecordScreen(
         vm.load(kidId)
     }
 
+    // Calculate current age for navigation
+    val currentAge = remember(state.kidBirthday) {
+        state.kidBirthday?.let { GrowthStandard.calculateAgeInYears(it, LocalDate.now()) }
+    }
+
     GrowthRecordContent(
         records = state.records,
         kidName = state.kidName,
@@ -99,6 +108,7 @@ fun GrowthRecordScreen(
         context = context,
         onBack = onBack,
         onOpenTimeline = { onOpenTimeline(kidId) },
+        onOpenStandard = { onOpenStandard(state.kidGender, currentAge) },
         onSaveRecord = { record ->
             vm.addOrUpdate(
                 id = record.id,
@@ -123,6 +133,7 @@ private fun GrowthRecordContent(
     context: Context,
     onBack: () -> Unit,
     onOpenTimeline: () -> Unit,
+    onOpenStandard: () -> Unit,
     onSaveRecord: (GrowthRecordUi) -> Unit,
     onDelete: (Long) -> Unit
 ) {
@@ -131,10 +142,17 @@ private fun GrowthRecordContent(
     var pendingRecord by remember { mutableStateOf<GrowthRecordUi?>(null) }
     var duplicateTarget by remember { mutableStateOf<GrowthRecordUi?>(null) }
     var showDuplicateDialog by remember { mutableStateOf(false) }
+    var showCurrentStandardDialog by remember { mutableStateOf(false) }
 
     // 检查是否可以进行成长分析
     val canAnalyze = kidGender == "男" || kidGender == "女"
     val hasBirthday = kidBirthday != null
+
+    // 计算当前年龄
+    val currentAgeInYears = remember(kidBirthday) {
+        kidBirthday?.let { GrowthStandard.calculateAgeInYears(it, LocalDate.now()) }
+    }
+    val canViewStandard = canAnalyze && currentAgeInYears != null && currentAgeInYears in 1..18
 
     Scaffold(
         modifier = Modifier
@@ -199,6 +217,18 @@ private fun GrowthRecordContent(
                 )
                 Spacer(modifier = Modifier.height(12.dp))
             }
+
+            // 当前年龄段标准查看卡片
+            if (canViewStandard) {
+                CurrentStandardCard(
+                    currentAge = currentAgeInYears!!,
+                    kidGender = kidGender,
+                    onViewCurrent = { showCurrentStandardDialog = true },
+                    onViewAll = onOpenStandard
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
             GrowthChart(records = records)
             Spacer(modifier = Modifier.height(16.dp))
             LazyColumn(
@@ -277,6 +307,19 @@ private fun GrowthRecordContent(
                 ) {
                     Text("取消")
                 }
+            }
+        )
+    }
+
+    // 当前年龄段标准详情弹窗
+    if (showCurrentStandardDialog && canViewStandard) {
+        CurrentStandardDialog(
+            ageInYears = currentAgeInYears!!,
+            kidGender = kidGender,
+            onDismiss = { showCurrentStandardDialog = false },
+            onViewAll = {
+                showCurrentStandardDialog = false
+                onOpenStandard()
             }
         )
     }
@@ -443,6 +486,173 @@ private fun AnalysisHintCard(
             text = "设置${missingItems.joinToString("和")}后，可查看身高体重是否达标",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+        )
+    }
+}
+
+/**
+ * 当前年龄段标准查看卡片
+ */
+@Composable
+private fun CurrentStandardCard(
+    currentAge: Int,
+    kidGender: String,
+    onViewCurrent: () -> Unit,
+    onViewAll: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+        ),
+        onClick = onViewCurrent
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "📊",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "${currentAge}岁成长标准",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+                TextButton(onClick = onViewAll) {
+                    Text("查看完整标准表")
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "点击查看当前年龄段的身高体重基线",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            )
+        }
+    }
+}
+
+/**
+ * 当前年龄段标准详情弹窗
+ */
+@Composable
+private fun CurrentStandardDialog(
+    ageInYears: Int,
+    kidGender: String,
+    onDismiss: () -> Unit,
+    onViewAll: () -> Unit
+) {
+    val heightStandards = remember(ageInYears, kidGender) {
+        GrowthStandard.getHeightStandards(kidGender, ageInYears)
+    }
+    val weightStandards = remember(ageInYears, kidGender) {
+        GrowthStandard.getWeightStandards(kidGender, ageInYears)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(text = "${ageInYears}岁${if (kidGender == "男") "男孩" else "女孩"}成长标准")
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // 身高标准
+                Column {
+                    Text(
+                        text = "身高标准 (cm)",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    if (heightStandards != null) {
+                        StandardRow("矮小", "< ${heightStandards[0]}", Color(0xFFE57373))
+                        StandardRow("偏矮", "${heightStandards[0]} - ${heightStandards[1]}", Color(0xFFFFB74D))
+                        StandardRow("标准", "${heightStandards[1]} - ${heightStandards[3]}", Color(0xFF81C784))
+                        StandardRow("超高", "> ${heightStandards[3]}", Color(0xFF4FC3F7))
+                    } else {
+                        Text("暂无数据", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+
+                // 体重标准
+                Column {
+                    Text(
+                        text = "体重标准 (kg)",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    if (weightStandards != null) {
+                        StandardRow("偏瘦", "< ${weightStandards[0]}", Color(0xFFFFB74D))
+                        StandardRow("标准", "${weightStandards[0]} - ${weightStandards[2]}", Color(0xFF81C784))
+                        StandardRow("超重", "${weightStandards[2]} - ${weightStandards[3]}", Color(0xFFFFB74D))
+                        StandardRow("肥胖", "> ${weightStandards[3]}", Color(0xFFE57373))
+                    } else {
+                        Text("暂无数据", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onViewAll) {
+                Text("查看完整标准表")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("关闭")
+            }
+        }
+    )
+}
+
+/**
+ * 标准数据行
+ */
+@Composable
+private fun StandardRow(
+    label: String,
+    value: String,
+    color: Color
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .background(color, CircleShape)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            color = color
         )
     }
 }

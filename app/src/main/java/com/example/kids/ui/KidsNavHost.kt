@@ -6,11 +6,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.example.kids.ui.kid.KidListViewModel
 import com.example.kids.ui.screens.GrowthRecordScreen
+import com.example.kids.ui.screens.GrowthStandardScreen
 import com.example.kids.ui.screens.GrowthTimelineScreen
 import com.example.kids.ui.screens.KidDetailScreen
 import com.example.kids.ui.screens.KidListScreen
@@ -22,6 +25,7 @@ object KidsDestinations {
     const val GROWTH = "growth"
     const val MOOD = "mood"
     const val GROWTH_TIMELINE = "growth_timeline"
+    const val GROWTH_STANDARD = "growth_standard"
 }
 
 @Composable
@@ -84,6 +88,11 @@ fun KidsNavHost(
                 onBack = { navController.popBackStack() },
                 onOpenTimeline = { id ->
                     navController.navigate("${KidsDestinations.GROWTH_TIMELINE}/$id")
+                },
+                onOpenStandard = { gender, age ->
+                    navController.navigate(
+                        "${KidsDestinations.GROWTH_STANDARD}/$kidId?gender=$gender&age=$age"
+                    )
                 }
             )
         }
@@ -92,6 +101,29 @@ fun KidsNavHost(
             val kidId = backStackEntry.arguments?.getString("kidId")?.toLongOrNull() ?: return@composable
             GrowthTimelineScreen(
                 kidId = kidId,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = "${KidsDestinations.GROWTH_STANDARD}/{kidId}?gender={gender}&age={age}",
+            arguments = listOf(
+                navArgument("gender") {
+                    type = NavType.StringType
+                    defaultValue = "男"
+                },
+                navArgument("age") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            )
+        ) { backStackEntry ->
+            val kidGender = backStackEntry.arguments?.getString("gender") ?: "男"
+            val currentAge = backStackEntry.arguments?.getString("age")?.toIntOrNull()
+            GrowthStandardScreen(
+                kidGender = kidGender,
+                currentAge = currentAge,
                 onBack = { navController.popBackStack() }
             )
         }
