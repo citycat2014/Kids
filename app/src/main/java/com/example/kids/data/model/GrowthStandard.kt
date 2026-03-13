@@ -281,15 +281,23 @@ object GrowthStandard {
     }
 
     /**
-     * 计算完整年龄文本（X岁X个月）
+     * 计算完整年龄文本（xx岁xx天格式）
+     * 1岁以下显示总天数，1岁以上显示X岁X天，为0时省略
      */
     fun calculateAgeText(birthday: java.time.LocalDate?): String {
         if (birthday == null) return "生日未设置"
-        val period = java.time.Period.between(birthday, java.time.LocalDate.now())
+        val today = java.time.LocalDate.now()
+        val period = java.time.Period.between(birthday, today)
+        val totalDays = java.time.temporal.ChronoUnit.DAYS.between(birthday, today).toInt()
+
         return when {
-            period.years > 0 && period.months > 0 -> "${period.years}岁${period.months}个月"
-            period.years > 0 -> "${period.years}岁"
-            period.months > 0 -> "${period.months}个月"
+            period.years > 0 -> {
+                // 计算今年的已过天数
+                val currentYearBirthday = birthday.plusYears(period.years.toLong())
+                val daysThisYear = java.time.temporal.ChronoUnit.DAYS.between(currentYearBirthday, today).toInt()
+                if (daysThisYear > 0) "${period.years}岁${daysThisYear}天" else "${period.years}岁"
+            }
+            totalDays > 0 -> "${totalDays}天"
             else -> "刚出生"
         }
     }
