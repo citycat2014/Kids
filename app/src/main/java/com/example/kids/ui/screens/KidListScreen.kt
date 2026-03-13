@@ -209,7 +209,7 @@ private fun KidCard(
                         onClick = onViewMood,
                         contentPadding = androidx.compose.material3.ButtonDefaults.ButtonWithIconContentPadding
                     ) {
-                        Text("成长日历")
+                        Text("乖不乖日历")
                     }
                 }
                 TextButton(
