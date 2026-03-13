@@ -10,6 +10,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -60,6 +61,7 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.example.kids.data.model.GrowthStandard
 import com.example.kids.ui.components.DatePickerField
 import com.example.kids.ui.growth.GrowthRecordUi
 import com.example.kids.ui.growth.GrowthRecordViewModel
@@ -91,6 +93,9 @@ fun GrowthRecordScreen(
 
     GrowthRecordContent(
         records = state.records,
+        kidName = state.kidName,
+        kidGender = state.kidGender,
+        kidBirthday = state.kidBirthday,
         context = context,
         onBack = onBack,
         onOpenTimeline = { onOpenTimeline(kidId) },
@@ -112,6 +117,9 @@ fun GrowthRecordScreen(
 @Composable
 private fun GrowthRecordContent(
     records: List<GrowthRecordUi>,
+    kidName: String,
+    kidGender: String,
+    kidBirthday: java.time.LocalDate?,
     context: Context,
     onBack: () -> Unit,
     onOpenTimeline: () -> Unit,
@@ -123,6 +131,10 @@ private fun GrowthRecordContent(
     var pendingRecord by remember { mutableStateOf<GrowthRecordUi?>(null) }
     var duplicateTarget by remember { mutableStateOf<GrowthRecordUi?>(null) }
     var showDuplicateDialog by remember { mutableStateOf(false) }
+
+    // 检查是否可以进行成长分析
+    val canAnalyze = kidGender == "男" || kidGender == "女"
+    val hasBirthday = kidBirthday != null
 
     Scaffold(
         modifier = Modifier
@@ -139,7 +151,7 @@ private fun GrowthRecordContent(
             ) {
                 Column {
                     Text(
-                        text = "成长记录",
+                        text = if (kidName.isNotBlank()) "$kidName 的成长记录" else "成长记录",
                         style = MaterialTheme.typography.headlineSmall
                     )
                     Text(
@@ -179,6 +191,14 @@ private fun GrowthRecordContent(
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
+            // 提示卡片：当无法进行成长分析时显示
+            if (!canAnalyze || !hasBirthday) {
+                AnalysisHintCard(
+                    canAnalyze = canAnalyze,
+                    hasBirthday = hasBirthday
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
             GrowthChart(records = records)
             Spacer(modifier = Modifier.height(16.dp))
             LazyColumn(
@@ -290,15 +310,52 @@ private fun GrowthRecordRow(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
             )
-            Text(
-                text = buildString {
-                    if (record.heightCm != null) append("身高 ${record.heightCm} cm  ")
-                    if (record.weightKg != null) append("体重 ${record.weightKg} kg")
-                    if (isEmpty()) append("未填写身高体重")
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-            )
+            // 身高体重及分析标签
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = buildString {
+                        if (record.heightCm != null) append("身高 ${record.heightCm} cm  ")
+                        if (record.weightKg != null) append("体重 ${record.weightKg} kg")
+                        if (isEmpty()) append("未填写身高体重")
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                )
+                // 分析标签
+                record.analysis?.let { analysis ->
+                    // 身高标签
+                    analysis.heightLevel?.let { level ->
+                        AnalysisChip(
+                            text = getHeightLevelText(level),
+                            color = getHeightLevelColor(level)
+                        )
+                    }
+                    // 体重标签
+                    analysis.weightLevel?.let { level ->
+                        AnalysisChip(
+                            text = getWeightLevelText(level),
+                            color = getWeightLevelColor(level)
+                        )
+                    }
+                } ?: run {
+                    // 显示无法分析的提示
+                    AnalysisChip(
+                        text = "未评估",
+                        color = Color(0xFF9E9E9E)
+                    )
+                }
+            }
+            // 年龄信息
+            record.analysis?.let { analysis ->
+                Text(
+                    text = "${analysis.ageInMonths / 12}岁${analysis.ageInMonths % 12}个月",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                )
+            }
             if (!record.note.isNullOrBlank()) {
                 Text(
                     text = record.note ?: "",
@@ -341,6 +398,124 @@ private fun GrowthRecordRow(
                 )
             }
         }
+    }
+}
+
+/**
+ * 分析提示卡片
+ * 当缺少生日或性别信息时显示
+ */
+@Composable
+private fun AnalysisHintCard(
+    canAnalyze: Boolean,
+    hasBirthday: Boolean
+) {
+    val missingItems = buildList {
+        if (!hasBirthday) add("生日")
+        if (!canAnalyze) add("性别（男/女）")
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                color = Color(0xFFFFF3E0), // 浅橙色背景
+                shape = RoundedCornerShape(12.dp)
+            )
+            .padding(12.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "ℹ️",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "成长评估功能",
+                style = MaterialTheme.typography.titleSmall,
+                color = Color(0xFFE65100)
+            )
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "设置${missingItems.joinToString("和")}后，可查看身高体重是否达标",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+        )
+    }
+}
+
+/**
+ * 分析标签组件
+ */
+@Composable
+private fun AnalysisChip(
+    text: String,
+    color: Color
+) {
+    Box(
+        modifier = Modifier
+            .background(
+                color = color.copy(alpha = 0.15f),
+                shape = RoundedCornerShape(4.dp)
+            )
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            color = color
+        )
+    }
+}
+
+/**
+ * 获取身高等级文本
+ */
+private fun getHeightLevelText(level: GrowthStandard.HeightLevel): String {
+    return when (level) {
+        GrowthStandard.HeightLevel.SHORT -> "偏矮"
+        GrowthStandard.HeightLevel.BELOW_AVG -> "略矮"
+        GrowthStandard.HeightLevel.STANDARD -> "标准"
+        GrowthStandard.HeightLevel.TALL -> "超高"
+    }
+}
+
+/**
+ * 获取身高等级颜色
+ */
+private fun getHeightLevelColor(level: GrowthStandard.HeightLevel): Color {
+    return when (level) {
+        GrowthStandard.HeightLevel.SHORT -> Color(0xFFE57373) // 红色
+        GrowthStandard.HeightLevel.BELOW_AVG -> Color(0xFFFFB74D) // 橙色
+        GrowthStandard.HeightLevel.STANDARD -> Color(0xFF81C784) // 绿色
+        GrowthStandard.HeightLevel.TALL -> Color(0xFF4FC3F7) // 蓝色
+    }
+}
+
+/**
+ * 获取体重等级文本
+ */
+private fun getWeightLevelText(level: GrowthStandard.WeightLevel): String {
+    return when (level) {
+        GrowthStandard.WeightLevel.UNDERWEIGHT -> "偏瘦"
+        GrowthStandard.WeightLevel.STANDARD -> "标准"
+        GrowthStandard.WeightLevel.OVERWEIGHT -> "超重"
+        GrowthStandard.WeightLevel.OBESE -> "肥胖"
+    }
+}
+
+/**
+ * 获取体重等级颜色
+ */
+private fun getWeightLevelColor(level: GrowthStandard.WeightLevel): Color {
+    return when (level) {
+        GrowthStandard.WeightLevel.UNDERWEIGHT -> Color(0xFFFFB74D) // 橙色
+        GrowthStandard.WeightLevel.STANDARD -> Color(0xFF81C784) // 绿色
+        GrowthStandard.WeightLevel.OVERWEIGHT -> Color(0xFFFFB74D) // 橙色
+        GrowthStandard.WeightLevel.OBESE -> Color(0xFFE57373) // 红色
     }
 }
 
