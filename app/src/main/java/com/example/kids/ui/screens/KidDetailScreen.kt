@@ -20,9 +20,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -31,6 +34,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,26 +46,23 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.example.kids.ui.components.DatePickerFieldWithClear
 import com.example.kids.ui.kid.KidDetailUiState
 import com.example.kids.ui.kid.KidDetailViewModel
 import com.example.kids.ui.theme.AppleBackground
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.File
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.time.format.DateTimeParseException
 
 @Composable
 fun KidDetailScreen(
     kidId: Long?,
     onFinished: () -> Unit,
-    onOpenGrowth: (Long) -> Unit,
-    onOpenMood: (Long) -> Unit
+    onCancel: () -> Unit = {}
 ) {
     val vm: KidDetailViewModel = viewModel()
     val state = vm.uiState.collectAsState()
+    val coroutineScope = rememberCoroutineScope()
 
     // 简单加载（幂等调用）:
     LaunchedEffect(kidId) {
@@ -87,6 +88,7 @@ fun KidDetailScreen(
 
     KidDetailContent(
         state = state.value,
+        isNew = state.value.isNew,
         onNameChange = vm::updateName,
         onGenderChange = vm::updateGender,
         onBirthdayChange = vm::updateBirthday,
@@ -97,35 +99,32 @@ fun KidDetailScreen(
             cameraLauncher.launch(uri)
         },
         onSave = {
-            CoroutineScope(Dispatchers.Main).launch {
+            coroutineScope.launch {
                 vm.save()
                 onFinished()
             }
         },
-        onOpenGrowth = onOpenGrowth,
-        onOpenMood = onOpenMood
+        onCancel = onCancel,
+        onToggleAutoCalculate = vm::toggleGradeAutoCalculate,
+        onAdjustGrade = vm::adjustGradeOffset
     )
 }
 
 @Composable
 private fun KidDetailContent(
     state: KidDetailUiState,
+    isNew: Boolean,
     onNameChange: (String) -> Unit,
     onGenderChange: (String) -> Unit,
     onBirthdayChange: (LocalDate?) -> Unit,
     onPickFromAlbum: () -> Unit,
     onTakePhoto: () -> Unit,
     onSave: () -> Unit,
-    onOpenGrowth: (Long) -> Unit,
-    onOpenMood: (Long) -> Unit
+    onCancel: () -> Unit,
+    onToggleAutoCalculate: (Boolean) -> Unit,
+    onAdjustGrade: (Int) -> Unit
 ) {
     var showAvatarSourceDialog by remember { mutableStateOf(false) }
-    var birthdayText by remember(state.birthday) {
-        mutableStateOf(
-            state.birthday?.format(DateTimeFormatter.ISO_LOCAL_DATE).orEmpty()
-        )
-    }
-    var birthdayError by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier
@@ -184,67 +183,49 @@ private fun KidDetailContent(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        OutlinedTextField(
-            modifier = Modifier.fillMaxWidth(),
-            value = birthdayText,
-            onValueChange = { text ->
-                birthdayText = text
-                if (text.isBlank()) {
-                    birthdayError = null
-                    onBirthdayChange(null)
-                } else {
-                    try {
-                        val date = LocalDate.parse(text, DateTimeFormatter.ISO_LOCAL_DATE)
-                        birthdayError = null
-                        onBirthdayChange(date)
-                    } catch (e: DateTimeParseException) {
-                        birthdayError = "日期格式应为 YYYY-MM-DD"
-                    }
-                }
-            },
-            label = { Text("生日 (YYYY-MM-DD，可选)") },
-            singleLine = true,
-            isError = birthdayError != null
+        DatePickerFieldWithClear(
+            value = state.birthday,
+            onValueChange = onBirthdayChange,
+            label = { Text("生日（可选）") },
+            placeholder = "点击选择生日"
         )
-        if (birthdayError != null) {
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = birthdayError.orEmpty(),
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall
+
+        // 年级显示与编辑区域
+        if (state.birthday != null) {
+            Spacer(modifier = Modifier.height(16.dp))
+            GradeSection(
+                currentGrade = state.calculatedGrade,
+                isAutoCalculate = state.isAutoCalculate,
+                gradeOffset = state.gradeOffset,
+                onToggleAutoCalculate = onToggleAutoCalculate,
+                onAdjustGrade = onAdjustGrade
             )
         }
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        Button(
-            onClick = onSave,
-            modifier = Modifier.fillMaxWidth()
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(text = "保存")
+            OutlinedButton(
+                onClick = onCancel,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("取消")
+            }
+            Button(
+                onClick = onSave,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(text = "保存")
+            }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        if (!state.isNew && state.id != 0L) {
-            Button(
-                onClick = { onOpenGrowth(state.id) },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(text = "查看成长记录")
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Button(
-                onClick = { onOpenMood(state.id) },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(text = "查看乖不乖日历")
-            }
-        } else {
+        if (isNew) {
+            Spacer(modifier = Modifier.height(24.dp))
             Text(
-                text = "保存后即可为宝贝记录身高体重和乖不乖日历",
+                text = "保存后即可为宝贝记录身高体重、乖不乖日历和学习档案",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
             )
@@ -365,5 +346,103 @@ private fun createImageUri(context: Context): Uri {
         "${context.packageName}.fileprovider",
         imageFile
     )
+}
+
+@Composable
+private fun GradeSection(
+    currentGrade: String,
+    isAutoCalculate: Boolean,
+    gradeOffset: Int,
+    onToggleAutoCalculate: (Boolean) -> Unit,
+    onAdjustGrade: (Int) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "当前年级",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "自动计算",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Switch(
+                        checked = isAutoCalculate,
+                        onCheckedChange = onToggleAutoCalculate
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = currentGrade.ifEmpty { "未设置" },
+                    style = MaterialTheme.typography.titleLarge,
+                    color = if (currentGrade.isNotEmpty())
+                        MaterialTheme.colorScheme.primary
+                    else
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                )
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { onAdjustGrade(-1) },
+                        enabled = !isAutoCalculate
+                    ) {
+                        Text("-")
+                    }
+                    OutlinedButton(
+                        onClick = { onAdjustGrade(1) },
+                        enabled = !isAutoCalculate
+                    ) {
+                        Text("+")
+                    }
+                }
+            }
+
+            if (!isAutoCalculate && gradeOffset != 0) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "手动调整: ${if (gradeOffset > 0) "+" else ""}$gradeOffset",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
+
+            if (isAutoCalculate) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "根据生日自动计算，每年9月1日自动升级",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
+        }
+    }
 }
 

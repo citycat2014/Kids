@@ -773,8 +773,8 @@ private fun MoodSelectDialog(
                     }
                 }
 
-                // Delete record option (only for future dates)
-                if (existingMood != null && date.isAfter(today)) {
+                // Delete record option (for today and future dates)
+                if (existingMood != null && !date.isBefore(today)) {
                     item {
                         Spacer(modifier = Modifier.height(8.dp))
                         TextButton(

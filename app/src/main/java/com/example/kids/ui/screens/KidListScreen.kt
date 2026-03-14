@@ -1,6 +1,7 @@
 package com.example.kids.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -14,15 +15,20 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,12 +40,17 @@ import coil.request.ImageRequest
 import com.example.kids.ui.mood.KidMood
 import com.example.kids.ui.theme.AppleBackground
 import com.example.kids.ui.theme.AppleCard
+import com.example.kids.ui.utils.getLunarDate
+import com.example.kids.ui.utils.getWeekDay
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 data class KidListItemUi(
     val id: Long,
     val name: String,
     val subtitle: String,
     val avatarUri: String?,
+    val gradeLevel: String? = null,  // 用于判断显示哪些入口
     val todaySummary: TodaySummary? = null
 )
 
@@ -54,7 +65,8 @@ fun KidListScreen(
     onAddKid: () -> Unit,
     onViewGrowth: (Long) -> Unit,
     onViewMood: (Long) -> Unit,
-    onEditKid: (Long) -> Unit
+    onEditKid: (Long) -> Unit,
+    onViewAcademic: (Long, String?) -> Unit = { _, _ -> }
 ) {
     Column(
         modifier = Modifier
@@ -63,10 +75,39 @@ fun KidListScreen(
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
         Spacer(modifier = Modifier.height(32.dp))
-        Text(
-            text = "宝贝",
-            style = MaterialTheme.typography.headlineLarge
-        )
+
+        // 日期展示区域与标题同行
+        val today = remember { LocalDate.now() }
+        val lunarDate = remember(today) { getLunarDate(today) }
+        val weekDay = remember(today) { getWeekDay(today) }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "宝贝",
+                style = MaterialTheme.typography.headlineLarge
+            )
+
+            // 日期展示移至右侧
+            Column(
+                horizontalAlignment = Alignment.End
+            ) {
+                Text(
+                    text = today.format(DateTimeFormatter.ofPattern("M月d日")) + " $weekDay",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
+                )
+                Text(
+                    text = lunarDate,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                )
+            }
+        }
+
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = "选择一个宝贝开始记录",
@@ -92,7 +133,8 @@ fun KidListScreen(
                     item = kid,
                     onViewGrowth = { onViewGrowth(kid.id) },
                     onViewMood = { onViewMood(kid.id) },
-                    onEdit = { onEditKid(kid.id) }
+                    onEdit = { onEditKid(kid.id) },
+                    onViewAcademic = { onViewAcademic(kid.id, kid.gradeLevel) }
                 )
             }
         }
@@ -104,11 +146,13 @@ private fun KidCard(
     item: KidListItemUi,
     onViewGrowth: () -> Unit,
     onViewMood: () -> Unit,
-    onEdit: () -> Unit
+    onEdit: () -> Unit,
+    onViewAcademic: () -> Unit = {}
 ) {
     Card(
         modifier = Modifier
-            .fillMaxWidth(),
+            .fillMaxWidth()
+            .clip(CardDefaults.shape),
         colors = CardDefaults.cardColors(
             containerColor = AppleCard
         ),
@@ -133,10 +177,24 @@ private fun KidCard(
                 Column(
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text(
-                        text = item.name,
-                        style = MaterialTheme.typography.titleMedium
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = item.name,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        IconButton(
+                            onClick = onEdit,
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "编辑资料",
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
+                        }
+                    }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = item.subtitle,
@@ -190,22 +248,29 @@ private fun KidCard(
             Spacer(modifier = Modifier.height(12.dp))
 
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                // 顺序：乖不乖日历 → 学习 → 成长
+                OutlinedButton(
+                    onClick = onViewMood,
+                    contentPadding = androidx.compose.material3.ButtonDefaults.ButtonWithIconContentPadding
                 ) {
-                    OutlinedButton(onClick = onViewGrowth) {
-                        Text("成长记录")
-                    }
-                    OutlinedButton(onClick = onViewMood) {
-                        Text("成长日历")
-                    }
+                    Text("乖不乖日历")
                 }
-                TextButton(onClick = onEdit) {
-                    Text("编辑资料")
+                OutlinedButton(
+                    onClick = onViewAcademic,
+                    contentPadding = androidx.compose.material3.ButtonDefaults.ButtonWithIconContentPadding
+                ) {
+                    Text("学习")
+                }
+                OutlinedButton(
+                    onClick = onViewGrowth,
+                    contentPadding = androidx.compose.material3.ButtonDefaults.ButtonWithIconContentPadding
+                ) {
+                    Text("成长")
                 }
             }
         }
@@ -219,11 +284,24 @@ private fun KidAvatarThumbnail(
 ) {
     val initial = name.firstOrNull()?.toString() ?: "宝"
 
+    // 根据名字生成一致的柔和背景色
+    val backgroundColor = remember(name) {
+        val colors = listOf(
+            androidx.compose.ui.graphics.Color(0xFFE3F2FD), // 蓝色系
+            androidx.compose.ui.graphics.Color(0xFFFFEBEE), // 粉色系
+            androidx.compose.ui.graphics.Color(0xFFE8F5E9), // 绿色系
+            androidx.compose.ui.graphics.Color(0xFFEDE7F6), // 紫色系
+            androidx.compose.ui.graphics.Color(0xFFF6E5C4), // 橙色系
+            androidx.compose.ui.graphics.Color(0xFFE0F2F1)  // 青色系
+        )
+        colors[name.lowercase().firstOrNull()?.code?.rem(colors.size.toInt()) ?: 0]
+    }
+
     androidx.compose.material3.Surface(
         modifier = Modifier
             .size(56.dp)
             .clip(CircleShape),
-        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+        color = backgroundColor,
         shape = CircleShape
     ) {
         if (avatarUri.isNullOrBlank()) {
@@ -235,7 +313,7 @@ private fun KidAvatarThumbnail(
                 Text(
                     text = initial,
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                 )
             }
         } else {

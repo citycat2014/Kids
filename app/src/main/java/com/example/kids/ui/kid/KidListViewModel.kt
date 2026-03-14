@@ -7,6 +7,7 @@ import com.example.kids.data.db.KidsDatabase
 import com.example.kids.data.repository.ExerciseRecordRepository
 import com.example.kids.data.repository.KidRepository
 import com.example.kids.data.repository.MoodRecordRepository
+import com.example.kids.data.model.GrowthStandard
 import com.example.kids.ui.mood.KidMood
 import com.example.kids.ui.screens.KidListItemUi
 import com.example.kids.ui.screens.TodaySummary
@@ -58,7 +59,7 @@ class KidListViewModel(application: Application) : AndroidViewModel(application)
                     KidListItemUi(
                         id = entity.id,
                         name = entity.name.ifBlank { "未命名宝贝" },
-                        subtitle = "点击【成长记录】或【乖不乖日历】查看数据",
+                        subtitle = GrowthStandard.calculateAgeText(entity.birthday),
                         avatarUri = entity.avatarUri,
                         todaySummary = todaySummary
                     )

@@ -10,6 +10,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -22,8 +23,12 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -47,6 +52,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -54,70 +61,30 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.example.kids.data.model.GrowthStandard
+import com.example.kids.ui.components.DatePickerField
 import com.example.kids.ui.growth.GrowthRecordUi
 import com.example.kids.ui.growth.GrowthRecordViewModel
 import com.example.kids.ui.theme.AppleBackground
+import com.example.kids.ui.utils.LocationHelper
 import com.example.kids.ui.utils.collectAsStateWithLifecycleSafe
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.collect
 import java.io.File
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import java.time.format.DateTimeParseException
-
-// Helper function to get current location
-private fun getCurrentLocation(context: Context, onLocationResult: (Double?, Double?) -> Unit) {
-    try {
-        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
-
-        // Check if GPS is enabled
-        val gpsEnabled = locationManager.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER)
-        val networkEnabled = locationManager.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER)
-
-        if (!gpsEnabled && !networkEnabled) {
-            onLocationResult(null, null)
-            return
-        }
-
-        // Get last known location (faster)
-        var bestLocation: android.location.Location? = null
-        val minTime = 2000L // 2 seconds
-        val minDistance = 10f // 10 meters
-
-        if (gpsEnabled) {
-            val gpsLocation = locationManager.getLastKnownLocation(android.location.LocationManager.GPS_PROVIDER)
-            if (gpsLocation != null && gpsLocation.time > System.currentTimeMillis() - minTime) {
-                bestLocation = gpsLocation
-            }
-        }
-
-        if (networkEnabled && bestLocation == null) {
-            val networkLocation = locationManager.getLastKnownLocation(android.location.LocationManager.NETWORK_PROVIDER)
-            if (networkLocation != null && networkLocation.time > System.currentTimeMillis() - minTime) {
-                bestLocation = networkLocation
-            }
-        }
-
-        if (bestLocation != null) {
-            onLocationResult(bestLocation.latitude, bestLocation.longitude)
-        } else {
-            onLocationResult(null, null)
-        }
-    } catch (e: Exception) {
-        onLocationResult(null, null)
-    }
-}
 
 @Composable
 fun GrowthRecordScreen(
     kidId: Long,
     onBack: () -> Unit,
-    onOpenTimeline: (Long) -> Unit
+    onOpenTimeline: (Long) -> Unit,
+    onOpenStandard: (String, Int?) -> Unit = { _, _ -> }
 ) {
     val vm: GrowthRecordViewModel = viewModel()
     val state by vm.uiState
@@ -128,11 +95,20 @@ fun GrowthRecordScreen(
         vm.load(kidId)
     }
 
+    // Calculate current age for navigation
+    val currentAge = remember(state.kidBirthday) {
+        state.kidBirthday?.let { GrowthStandard.calculateAgeInYears(it, LocalDate.now()) }
+    }
+
     GrowthRecordContent(
         records = state.records,
+        kidName = state.kidName,
+        kidGender = state.kidGender,
+        kidBirthday = state.kidBirthday,
         context = context,
         onBack = onBack,
         onOpenTimeline = { onOpenTimeline(kidId) },
+        onOpenStandard = { onOpenStandard(state.kidGender, currentAge) },
         onSaveRecord = { record ->
             vm.addOrUpdate(
                 id = record.id,
@@ -151,9 +127,13 @@ fun GrowthRecordScreen(
 @Composable
 private fun GrowthRecordContent(
     records: List<GrowthRecordUi>,
+    kidName: String,
+    kidGender: String,
+    kidBirthday: java.time.LocalDate?,
     context: Context,
     onBack: () -> Unit,
     onOpenTimeline: () -> Unit,
+    onOpenStandard: () -> Unit,
     onSaveRecord: (GrowthRecordUi) -> Unit,
     onDelete: (Long) -> Unit
 ) {
@@ -162,6 +142,17 @@ private fun GrowthRecordContent(
     var pendingRecord by remember { mutableStateOf<GrowthRecordUi?>(null) }
     var duplicateTarget by remember { mutableStateOf<GrowthRecordUi?>(null) }
     var showDuplicateDialog by remember { mutableStateOf(false) }
+    var showCurrentStandardDialog by remember { mutableStateOf(false) }
+
+    // 检查是否可以进行成长分析
+    val canAnalyze = kidGender == "男" || kidGender == "女"
+    val hasBirthday = kidBirthday != null
+
+    // 计算当前年龄
+    val currentAgeInYears = remember(kidBirthday) {
+        kidBirthday?.let { GrowthStandard.calculateAgeInYears(it, LocalDate.now()) }
+    }
+    val canViewStandard = canAnalyze && currentAgeInYears != null && currentAgeInYears in 1..18
 
     Scaffold(
         modifier = Modifier
@@ -178,7 +169,7 @@ private fun GrowthRecordContent(
             ) {
                 Column {
                     Text(
-                        text = "成长记录",
+                        text = if (kidName.isNotBlank()) "$kidName 的成长记录" else "成长记录",
                         style = MaterialTheme.typography.headlineSmall
                     )
                     Text(
@@ -218,6 +209,26 @@ private fun GrowthRecordContent(
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
+            // 提示卡片：当无法进行成长分析时显示
+            if (!canAnalyze || !hasBirthday) {
+                AnalysisHintCard(
+                    canAnalyze = canAnalyze,
+                    hasBirthday = hasBirthday
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // 当前年龄段标准查看卡片
+            if (canViewStandard) {
+                CurrentStandardCard(
+                    currentAge = currentAgeInYears!!,
+                    kidGender = kidGender,
+                    onViewCurrent = { showCurrentStandardDialog = true },
+                    onViewAll = onOpenStandard
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
             GrowthChart(records = records)
             Spacer(modifier = Modifier.height(16.dp))
             LazyColumn(
@@ -249,6 +260,7 @@ private fun GrowthRecordContent(
                 if (existingSameDate != null && updated.id == 0L) {
                     pendingRecord = updated
                     duplicateTarget = existingSameDate
+                    isDialogOpen = false
                     showDuplicateDialog = true
                 } else {
                     onSaveRecord(updated)
@@ -277,7 +289,6 @@ private fun GrowthRecordContent(
                             base.copy(id = target.id)
                         )
                         showDuplicateDialog = false
-                        isDialogOpen = false
                         pendingRecord = null
                         duplicateTarget = null
                     }
@@ -289,11 +300,26 @@ private fun GrowthRecordContent(
                 TextButton(
                     onClick = {
                         showDuplicateDialog = false
-                        // 保留编辑弹窗，用户可以修改日期或内容
+                        pendingRecord = null
+                        duplicateTarget = null
+                        isDialogOpen = true
                     }
                 ) {
                     Text("取消")
                 }
+            }
+        )
+    }
+
+    // 当前年龄段标准详情弹窗
+    if (showCurrentStandardDialog && canViewStandard) {
+        CurrentStandardDialog(
+            ageInYears = currentAgeInYears!!,
+            kidGender = kidGender,
+            onDismiss = { showCurrentStandardDialog = false },
+            onViewAll = {
+                showCurrentStandardDialog = false
+                onOpenStandard()
             }
         )
     }
@@ -308,33 +334,80 @@ private fun GrowthRecordRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .shadow(
+                elevation = 2.dp,
+                shape = RoundedCornerShape(12.dp),
+                ambientColor = Color(0x1A000000),
+                spotColor = Color(0x1A000000)
+            )
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFFF9F9F9))
+            .clickable { /* 预留点击事件 */ }
+            .padding(vertical = 12.dp, horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Column {
             Text(
                 text = record.date.toString(),
-                style = MaterialTheme.typography.bodyMedium
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
             )
-            Text(
-                text = buildString {
-                    if (record.heightCm != null) append("身高 ${record.heightCm} cm  ")
-                    if (record.weightKg != null) append("体重 ${record.weightKg} kg")
-                    if (isEmpty()) append("未填写身高体重")
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
-            )
+            // 身高体重及分析标签
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = buildString {
+                        if (record.heightCm != null) append("身高 ${record.heightCm} cm  ")
+                        if (record.weightKg != null) append("体重 ${record.weightKg} kg")
+                        if (isEmpty()) append("未填写身高体重")
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                )
+                // 分析标签
+                record.analysis?.let { analysis ->
+                    // 身高标签
+                    analysis.heightLevel?.let { level ->
+                        AnalysisChip(
+                            text = getHeightLevelText(level),
+                            color = getHeightLevelColor(level)
+                        )
+                    }
+                    // 体重标签
+                    analysis.weightLevel?.let { level ->
+                        AnalysisChip(
+                            text = getWeightLevelText(level),
+                            color = getWeightLevelColor(level)
+                        )
+                    }
+                } ?: run {
+                    // 显示无法分析的提示
+                    AnalysisChip(
+                        text = "未评估",
+                        color = Color(0xFF9E9E9E)
+                    )
+                }
+            }
+            // 年龄信息
+            record.analysis?.let { analysis ->
+                Text(
+                    text = "${analysis.ageInMonths / 12}岁${analysis.ageInMonths % 12}个月",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                )
+            }
             if (!record.note.isNullOrBlank()) {
                 Text(
                     text = record.note ?: "",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                 )
             }
             if (!record.photoUri.isNullOrBlank()) {
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(record.photoUri)
@@ -343,19 +416,316 @@ private fun GrowthRecordRow(
                     contentDescription = "记录照片",
                     modifier = Modifier
                         .height(80.dp)
-                        .fillMaxWidth(),
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp)),
                     contentScale = ContentScale.Crop
                 )
             }
         }
         Row {
-            IconButton(onClick = { onEdit(record) }) {
-                Icon(Icons.Default.Edit, contentDescription = "编辑")
+            IconButton(
+                onClick = { onEdit(record) },
+                modifier = Modifier.padding(end = 8.dp)
+            ) {
+                Icon(
+                    Icons.Default.Edit,
+                    contentDescription = "编辑",
+                    tint = MaterialTheme.colorScheme.primary
+                )
             }
             IconButton(onClick = onDelete) {
-                Icon(Icons.Default.Delete, contentDescription = "删除")
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "删除",
+                    tint = MaterialTheme.colorScheme.error
+                )
             }
         }
+    }
+}
+
+/**
+ * 分析提示卡片
+ * 当缺少生日或性别信息时显示
+ */
+@Composable
+private fun AnalysisHintCard(
+    canAnalyze: Boolean,
+    hasBirthday: Boolean
+) {
+    val missingItems = buildList {
+        if (!hasBirthday) add("生日")
+        if (!canAnalyze) add("性别（男/女）")
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                color = Color(0xFFFFF3E0), // 浅橙色背景
+                shape = RoundedCornerShape(12.dp)
+            )
+            .padding(12.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "ℹ️",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "成长评估功能",
+                style = MaterialTheme.typography.titleSmall,
+                color = Color(0xFFE65100)
+            )
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "设置${missingItems.joinToString("和")}后，可查看身高体重是否达标",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+        )
+    }
+}
+
+/**
+ * 当前年龄段标准查看卡片
+ */
+@Composable
+private fun CurrentStandardCard(
+    currentAge: Int,
+    kidGender: String,
+    onViewCurrent: () -> Unit,
+    onViewAll: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+        ),
+        onClick = onViewCurrent
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "📊",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "${currentAge}岁成长标准",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+                TextButton(onClick = onViewAll) {
+                    Text("查看完整标准表")
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "点击查看当前年龄段的身高体重基线",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            )
+        }
+    }
+}
+
+/**
+ * 当前年龄段标准详情弹窗
+ */
+@Composable
+private fun CurrentStandardDialog(
+    ageInYears: Int,
+    kidGender: String,
+    onDismiss: () -> Unit,
+    onViewAll: () -> Unit
+) {
+    val heightStandards = remember(ageInYears, kidGender) {
+        GrowthStandard.getHeightStandards(kidGender, ageInYears)
+    }
+    val weightStandards = remember(ageInYears, kidGender) {
+        GrowthStandard.getWeightStandards(kidGender, ageInYears)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(text = "${ageInYears}岁${if (kidGender == "男") "男孩" else "女孩"}成长标准")
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // 身高标准
+                Column {
+                    Text(
+                        text = "身高标准 (cm)",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    if (heightStandards != null) {
+                        StandardRow("矮小", "< ${heightStandards[0]}", Color(0xFFE57373))
+                        StandardRow("偏矮", "${heightStandards[0]} - ${heightStandards[1]}", Color(0xFFFFB74D))
+                        StandardRow("标准", "${heightStandards[1]} - ${heightStandards[3]}", Color(0xFF81C784))
+                        StandardRow("超高", "> ${heightStandards[3]}", Color(0xFF4FC3F7))
+                    } else {
+                        Text("暂无数据", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+
+                // 体重标准
+                Column {
+                    Text(
+                        text = "体重标准 (kg)",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    if (weightStandards != null) {
+                        StandardRow("偏瘦", "< ${weightStandards[0]}", Color(0xFFFFB74D))
+                        StandardRow("标准", "${weightStandards[0]} - ${weightStandards[2]}", Color(0xFF81C784))
+                        StandardRow("超重", "${weightStandards[2]} - ${weightStandards[3]}", Color(0xFFFFB74D))
+                        StandardRow("肥胖", "> ${weightStandards[3]}", Color(0xFFE57373))
+                    } else {
+                        Text("暂无数据", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onViewAll) {
+                Text("查看完整标准表")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("关闭")
+            }
+        }
+    )
+}
+
+/**
+ * 标准数据行
+ */
+@Composable
+private fun StandardRow(
+    label: String,
+    value: String,
+    color: Color
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .background(color, CircleShape)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            color = color
+        )
+    }
+}
+
+/**
+ * 分析标签组件
+ */
+@Composable
+private fun AnalysisChip(
+    text: String,
+    color: Color
+) {
+    Box(
+        modifier = Modifier
+            .background(
+                color = color.copy(alpha = 0.15f),
+                shape = RoundedCornerShape(4.dp)
+            )
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            color = color
+        )
+    }
+}
+
+/**
+ * 获取身高等级文本
+ */
+private fun getHeightLevelText(level: GrowthStandard.HeightLevel): String {
+    return when (level) {
+        GrowthStandard.HeightLevel.SHORT -> "偏矮"
+        GrowthStandard.HeightLevel.BELOW_AVG -> "略矮"
+        GrowthStandard.HeightLevel.STANDARD -> "标准"
+        GrowthStandard.HeightLevel.TALL -> "超高"
+    }
+}
+
+/**
+ * 获取身高等级颜色
+ */
+private fun getHeightLevelColor(level: GrowthStandard.HeightLevel): Color {
+    return when (level) {
+        GrowthStandard.HeightLevel.SHORT -> Color(0xFFE57373) // 红色
+        GrowthStandard.HeightLevel.BELOW_AVG -> Color(0xFFFFB74D) // 橙色
+        GrowthStandard.HeightLevel.STANDARD -> Color(0xFF81C784) // 绿色
+        GrowthStandard.HeightLevel.TALL -> Color(0xFF4FC3F7) // 蓝色
+    }
+}
+
+/**
+ * 获取体重等级文本
+ */
+private fun getWeightLevelText(level: GrowthStandard.WeightLevel): String {
+    return when (level) {
+        GrowthStandard.WeightLevel.UNDERWEIGHT -> "偏瘦"
+        GrowthStandard.WeightLevel.STANDARD -> "标准"
+        GrowthStandard.WeightLevel.OVERWEIGHT -> "超重"
+        GrowthStandard.WeightLevel.OBESE -> "肥胖"
+    }
+}
+
+/**
+ * 获取体重等级颜色
+ */
+private fun getWeightLevelColor(level: GrowthStandard.WeightLevel): Color {
+    return when (level) {
+        GrowthStandard.WeightLevel.UNDERWEIGHT -> Color(0xFFFFB74D) // 橙色
+        GrowthStandard.WeightLevel.STANDARD -> Color(0xFF81C784) // 绿色
+        GrowthStandard.WeightLevel.OVERWEIGHT -> Color(0xFFFFB74D) // 橙色
+        GrowthStandard.WeightLevel.OBESE -> Color(0xFFE57373) // 红色
     }
 }
 
@@ -366,11 +736,7 @@ private fun GrowthRecordDialog(
     onDismiss: () -> Unit,
     onConfirm: (GrowthRecordUi) -> Unit
 ) {
-    var dateText by remember {
-        mutableStateOf(
-            (initial?.date ?: LocalDate.now()).format(DateTimeFormatter.ISO_LOCAL_DATE)
-        )
-    }
+    var selectedDate by remember { mutableStateOf(initial?.date ?: LocalDate.now()) }
     var heightText by remember { mutableStateOf(initial?.heightCm?.toString().orEmpty()) }
     var weightText by remember { mutableStateOf(initial?.weightKg?.toString().orEmpty()) }
     var noteText by remember { mutableStateOf(initial?.note.orEmpty()) }
@@ -382,20 +748,24 @@ private fun GrowthRecordDialog(
     var currentLongitude by remember { mutableStateOf<Double?>(initial?.longitude) }
     var latText by remember { mutableStateOf(initial?.latitude?.toString().orEmpty()) }
     var lngText by remember { mutableStateOf(initial?.longitude?.toString().orEmpty()) }
-    var hasLocationPermission by remember { mutableStateOf(false) }
     var locationError by remember { mutableStateOf<String?>(null) }
+    var isLoadingLocation by remember { mutableStateOf(false) }
+
+    val coroutineScope = rememberCoroutineScope()
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
-        hasLocationPermission = isGranted
         if (isGranted) {
-            getCurrentLocation(context) { lat, lng ->
-                currentLatitude = lat
-                currentLongitude = lng
-                latText = lat?.toString().orEmpty()
-                lngText = lng?.toString().orEmpty()
-                locationError = null
+            isLoadingLocation = true
+            coroutineScope.launch {
+                val result = LocationHelper.getCurrentLocation(context)
+                currentLatitude = result.latitude
+                currentLongitude = result.longitude
+                latText = result.latitude?.toString().orEmpty()
+                lngText = result.longitude?.toString().orEmpty()
+                locationError = if (!result.isValid) "无法获取位置信息" else null
+                isLoadingLocation = false
             }
         } else {
             locationError = "需要位置权限才能获取当前位置"
@@ -421,11 +791,10 @@ private fun GrowthRecordDialog(
         title = { Text(text = if (initial == null) "添加记录" else "编辑记录") },
         text = {
             Column {
-                OutlinedTextField(
-                    value = dateText,
-                    onValueChange = { dateText = it },
-                    label = { Text("日期 (YYYY-MM-DD)") },
-                    singleLine = true
+                DatePickerField(
+                    value = selectedDate,
+                    onValueChange = { selectedDate = it ?: LocalDate.now() },
+                    label = { Text("日期") }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
@@ -499,6 +868,15 @@ private fun GrowthRecordDialog(
                     )
                 }
 
+                // Loading indicator
+                if (isLoadingLocation) {
+                    Text(
+                        text = "正在获取位置...",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                }
+
                 // Buttons for location
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -508,7 +886,8 @@ private fun GrowthRecordDialog(
                         onClick = {
                             locationPermissionLauncher.launch(android.Manifest.permission.ACCESS_FINE_LOCATION)
                         },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        enabled = !isLoadingLocation
                     ) {
                         Text("获取当前位置")
                     }
@@ -585,13 +964,6 @@ private fun GrowthRecordDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    val date = try {
-                        LocalDate.parse(dateText, DateTimeFormatter.ISO_LOCAL_DATE)
-                    } catch (e: DateTimeParseException) {
-                        errorText = "日期格式不正确"
-                        return@TextButton
-                    }
-
                     val height = heightText.toFloatOrNull()
                     val weight = weightText.toFloatOrNull()
                     val note = noteText.ifBlank { null }
@@ -599,7 +971,7 @@ private fun GrowthRecordDialog(
                     onConfirm(
                         GrowthRecordUi(
                             id = initial?.id ?: 0L,
-                            date = date,
+                            date = selectedDate,
                             heightCm = height,
                             weightKg = weight,
                             note = note,
