@@ -287,6 +287,7 @@ private fun MergedTableRow(
             val record = exam.records.find { it.subject == subject }
             ScoreCell(
                 score = record?.score,
+                bonusScore = record?.bonusScore,
                 grade = record?.grade,
                 modifier = Modifier.width(cellWidth)
             )
@@ -313,10 +314,13 @@ private fun MergedTableRow(
 @Composable
 private fun ScoreCell(
     score: Float?,
+    bonusScore: Float?,
     grade: String?,
     modifier: Modifier = Modifier
 ) {
+    // 显示格式：主分数 或 主分数+附加分
     val displayText = when {
+        score != null && bonusScore != null && bonusScore > 0 -> "%.0f+%.0f".format(score, bonusScore)
         score != null -> "%.0f".format(score)
         grade != null -> grade
         else -> "-"

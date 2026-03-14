@@ -24,7 +24,8 @@ data class AcademicRecordUi(
     val examType: String,
     val gradeLevel: String,
     val subject: String,
-    val score: Float?,
+    val score: Float?,              // 主分数
+    val bonusScore: Float?,         // 附加分
     val grade: String?,
     val comment: String?
 )
@@ -41,7 +42,8 @@ data class ExamUi(
 // 科目成绩输入数据类
 data class SubjectScoreInput(
     val subject: String,
-    val score: Float?,
+    val score: Float?,              // 主分数
+    val bonusScore: Float?,         // 附加分（可选）
     val grade: String?,
     val comment: String?,
     val gradeManuallySet: Boolean = false
@@ -303,6 +305,7 @@ class AcademicRecordViewModel(application: Application) : AndroidViewModel(appli
                             semester = semester,
                             subject = input.subject,
                             score = input.score,
+                            bonusScore = input.bonusScore,
                             grade = input.grade,
                             comment = input.comment
                         )
@@ -339,6 +342,7 @@ class AcademicRecordViewModel(application: Application) : AndroidViewModel(appli
                     semester = semester,
                     subject = record.subject,
                     score = record.score,
+                    bonusScore = record.bonusScore,
                     grade = record.grade,
                     comment = record.comment
                 )
@@ -386,6 +390,7 @@ class AcademicRecordViewModel(application: Application) : AndroidViewModel(appli
                             semester = semester,
                             subject = input.subject,
                             score = input.score,
+                            bonusScore = input.bonusScore,
                             grade = input.grade,
                             comment = input.comment
                         )
@@ -425,6 +430,7 @@ class AcademicRecordViewModel(application: Application) : AndroidViewModel(appli
                     semester = semester,
                     subject = record.subject,
                     score = record.score,
+                    bonusScore = record.bonusScore,
                     grade = record.grade,
                     comment = record.comment
                 )
@@ -484,6 +490,7 @@ class AcademicRecordViewModel(application: Application) : AndroidViewModel(appli
             gradeLevel = gradeLevel,
             subject = subject,
             score = score,
+            bonusScore = bonusScore,
             grade = grade,
             comment = comment
         )

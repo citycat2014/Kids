@@ -76,6 +76,7 @@ fun ExamInputDialog(
     var selectedUnit by remember { mutableStateOf("") }
     var customUnit by remember { mutableStateOf("") }
     var singleScore by remember { mutableStateOf<Float?>(null) }
+    var singleBonusScore by remember { mutableStateOf<Float?>(null) }
     var singleGrade by remember { mutableStateOf<String?>(null) }
     var singleGradeManuallySet by remember { mutableStateOf(false) }
     var singleComment by remember { mutableStateOf("") }
@@ -92,17 +93,19 @@ fun ExamInputDialog(
                         SubjectScoreInput(
                             subject = subject,
                             score = record.score,
+                            bonusScore = record.bonusScore,
                             grade = record.grade,
                             comment = record.comment,
                             gradeManuallySet = record.grade != null
                         )
-                    } ?: SubjectScoreInput(subject, null, null, null)
+                    } ?: SubjectScoreInput(subject, null, null, null, null)
                 }
             } else {
                 // 单科目模式：预填充第一个科目
                 exam.records.firstOrNull()?.let { record ->
                     selectedSubject = record.subject
                     singleScore = record.score
+                    singleBonusScore = record.bonusScore
                     singleGrade = record.grade
                     singleGradeManuallySet = record.grade != null
                     singleComment = record.comment ?: ""
@@ -111,7 +114,7 @@ fun ExamInputDialog(
         } else if (isMultiSubject) {
             // 新建模式：初始化所有科目
             subjectScores = subjects.associateWith { subject ->
-                SubjectScoreInput(subject, null, null, null)
+                SubjectScoreInput(subject, null, null, null, null)
             }
         } else if (selectedSubject.isBlank() && subjects.isNotEmpty()) {
             selectedSubject = subjects.first()
@@ -218,7 +221,7 @@ fun ExamInputDialog(
                     subjects.forEach { subject ->
                         MultiSubjectScoreRow(
                             subject = subject,
-                            input = subjectScores[subject] ?: SubjectScoreInput(subject, null, null, null),
+                            input = subjectScores[subject] ?: SubjectScoreInput(subject, null, null, null, null),
                             onInputChange = { input ->
                                 subjectScores = subjectScores.toMutableMap().apply {
                                     put(subject, input)
@@ -330,6 +333,20 @@ fun ExamInputDialog(
                             singleLine = true
                         )
 
+                        // 数学科目显示附加分输入框
+                        if (selectedSubject == "数学") {
+                            OutlinedTextField(
+                                value = singleBonusScore?.toString() ?: "",
+                                onValueChange = { value ->
+                                    singleBonusScore = value.toFloatOrNull()
+                                },
+                                label = { Text("附加分") },
+                                placeholder = { Text("可选") },
+                                modifier = Modifier.weight(0.8f),
+                                singleLine = true
+                            )
+                        }
+
                         ExposedDropdownMenuBox(
                             expanded = singleGradeExpanded,
                             onExpandedChange = { singleGradeExpanded = it },
@@ -398,7 +415,7 @@ fun ExamInputDialog(
                             selectedUnit == "自定义" -> customUnit.takeIf { it.isNotBlank() }
                             else -> selectedUnit
                         }
-                        val record = SubjectScoreInput(selectedSubject, singleScore, singleGrade, singleComment.takeIf { it.isNotBlank() })
+                        val record = SubjectScoreInput(selectedSubject, singleScore, singleBonusScore, singleGrade, singleComment.takeIf { it.isNotBlank() })
                         onSaveSingle(examType, examDate, selectedGrade, semester, unitValue, record)
                     }
                 },
@@ -463,6 +480,21 @@ private fun MultiSubjectScoreRow(
                     modifier = Modifier.weight(1f),
                     singleLine = true
                 )
+
+                // 数学科目显示附加分输入框
+                if (subject == "数学") {
+                    OutlinedTextField(
+                        value = input.bonusScore?.toString() ?: "",
+                        onValueChange = { value ->
+                            val bonusScore = value.toFloatOrNull()
+                            onInputChange(input.copy(bonusScore = bonusScore))
+                        },
+                        label = { Text("附加分") },
+                        placeholder = { Text("可选") },
+                        modifier = Modifier.weight(0.8f),
+                        singleLine = true
+                    )
+                }
 
                 // 等级下拉
                 ExposedDropdownMenuBox(

@@ -203,10 +203,15 @@ private fun RecordItem(record: AcademicRecordUi) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 分数
+                // 分数（显示附加分）
                 record.score?.let { score ->
+                    val scoreText = if (record.bonusScore != null && record.bonusScore > 0) {
+                        "%.0f+%.0f分".format(score, record.bonusScore)
+                    } else {
+                        "%.1f分".format(score)
+                    }
                     Text(
-                        text = "%.1f分".format(score),
+                        text = scoreText,
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = getScoreColor(score)
