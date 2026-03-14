@@ -35,6 +35,10 @@ import coil.request.ImageRequest
 import com.example.kids.ui.mood.KidMood
 import com.example.kids.ui.theme.AppleBackground
 import com.example.kids.ui.theme.AppleCard
+import com.example.kids.ui.utils.getLunarDate
+import com.example.kids.ui.utils.getWeekDay
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 data class KidListItemUi(
     val id: Long,
@@ -64,10 +68,39 @@ fun KidListScreen(
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
         Spacer(modifier = Modifier.height(32.dp))
-        Text(
-            text = "宝贝",
-            style = MaterialTheme.typography.headlineLarge
-        )
+
+        // 日期展示区域与标题同行
+        val today = remember { LocalDate.now() }
+        val lunarDate = remember(today) { getLunarDate(today) }
+        val weekDay = remember(today) { getWeekDay(today) }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "宝贝",
+                style = MaterialTheme.typography.headlineLarge
+            )
+
+            // 日期展示移至右侧
+            Column(
+                horizontalAlignment = Alignment.End
+            ) {
+                Text(
+                    text = today.format(DateTimeFormatter.ofPattern("M月d日")) + " $weekDay",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
+                )
+                Text(
+                    text = lunarDate,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                )
+            }
+        }
+
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = "选择一个宝贝开始记录",
