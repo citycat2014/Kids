@@ -1,6 +1,7 @@
 package com.example.kids.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -14,14 +15,18 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -45,6 +50,7 @@ data class KidListItemUi(
     val name: String,
     val subtitle: String,
     val avatarUri: String?,
+    val gradeLevel: String? = null,  // 用于判断显示哪些入口
     val todaySummary: TodaySummary? = null
 )
 
@@ -59,7 +65,8 @@ fun KidListScreen(
     onAddKid: () -> Unit,
     onViewGrowth: (Long) -> Unit,
     onViewMood: (Long) -> Unit,
-    onEditKid: (Long) -> Unit
+    onEditKid: (Long) -> Unit,
+    onViewAcademic: (Long, String?) -> Unit = { _, _ -> }
 ) {
     Column(
         modifier = Modifier
@@ -126,7 +133,8 @@ fun KidListScreen(
                     item = kid,
                     onViewGrowth = { onViewGrowth(kid.id) },
                     onViewMood = { onViewMood(kid.id) },
-                    onEdit = { onEditKid(kid.id) }
+                    onEdit = { onEditKid(kid.id) },
+                    onViewAcademic = { onViewAcademic(kid.id, kid.gradeLevel) }
                 )
             }
         }
@@ -138,7 +146,8 @@ private fun KidCard(
     item: KidListItemUi,
     onViewGrowth: () -> Unit,
     onViewMood: () -> Unit,
-    onEdit: () -> Unit
+    onEdit: () -> Unit,
+    onViewAcademic: () -> Unit = {}
 ) {
     Card(
         modifier = Modifier
@@ -168,10 +177,24 @@ private fun KidCard(
                 Column(
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text(
-                        text = item.name,
-                        style = MaterialTheme.typography.titleMedium
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = item.name,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        IconButton(
+                            onClick = onEdit,
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "编辑资料",
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
+                        }
+                    }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = item.subtitle,
@@ -225,31 +248,29 @@ private fun KidCard(
             Spacer(modifier = Modifier.height(12.dp))
 
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = onViewGrowth,
-                        contentPadding = androidx.compose.material3.ButtonDefaults.ButtonWithIconContentPadding
-                    ) {
-                        Text("成长记录")
-                    }
-                    OutlinedButton(
-                        onClick = onViewMood,
-                        contentPadding = androidx.compose.material3.ButtonDefaults.ButtonWithIconContentPadding
-                    ) {
-                        Text("乖不乖日历")
-                    }
-                }
-                TextButton(
-                    onClick = onEdit,
+                // 顺序：乖不乖日历 → 学习 → 成长
+                OutlinedButton(
+                    onClick = onViewMood,
                     contentPadding = androidx.compose.material3.ButtonDefaults.ButtonWithIconContentPadding
                 ) {
-                    Text("编辑资料")
+                    Text("乖不乖日历")
+                }
+                OutlinedButton(
+                    onClick = onViewAcademic,
+                    contentPadding = androidx.compose.material3.ButtonDefaults.ButtonWithIconContentPadding
+                ) {
+                    Text("学习")
+                }
+                OutlinedButton(
+                    onClick = onViewGrowth,
+                    contentPadding = androidx.compose.material3.ButtonDefaults.ButtonWithIconContentPadding
+                ) {
+                    Text("成长")
                 }
             }
         }

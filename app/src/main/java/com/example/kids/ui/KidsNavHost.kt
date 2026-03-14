@@ -12,6 +12,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.kids.ui.kid.KidListViewModel
+import com.example.kids.ui.academic.AcademicRecordScreen
 import com.example.kids.ui.screens.GrowthRecordScreen
 import com.example.kids.ui.screens.GrowthStandardScreen
 import com.example.kids.ui.screens.GrowthTimelineScreen
@@ -26,6 +27,7 @@ object KidsDestinations {
     const val MOOD = "mood"
     const val GROWTH_TIMELINE = "growth_timeline"
     const val GROWTH_STANDARD = "growth_standard"
+    const val ACADEMIC = "academic"
 }
 
 @Composable
@@ -50,6 +52,14 @@ fun KidsNavHost(
                 },
                 onEditKid = { id ->
                     navController.navigate("${KidsDestinations.KID_DETAIL}/$id")
+                },
+                // 学习档案入口
+                onViewAcademic = { id, grade ->
+                    if (!grade.isNullOrBlank()) {
+                        navController.navigate("${KidsDestinations.ACADEMIC}/$id?grade=$grade")
+                    } else {
+                        navController.navigate("${KidsDestinations.ACADEMIC}/$id")
+                    }
                 }
             )
         }
@@ -58,12 +68,7 @@ fun KidsNavHost(
             KidDetailScreen(
                 kidId = null,
                 onFinished = { navController.popBackStack() },
-                onOpenGrowth = { id ->
-                    navController.navigate("${KidsDestinations.GROWTH}/$id")
-                },
-                onOpenMood = { id ->
-                    navController.navigate("${KidsDestinations.MOOD}/$id")
-                }
+                onCancel = { navController.popBackStack() }
             )
         }
 
@@ -72,12 +77,7 @@ fun KidsNavHost(
             KidDetailScreen(
                 kidId = kidId,
                 onFinished = { navController.popBackStack() },
-                onOpenGrowth = { id ->
-                    navController.navigate("${KidsDestinations.GROWTH}/$id")
-                },
-                onOpenMood = { id ->
-                    navController.navigate("${KidsDestinations.MOOD}/$id")
-                }
+                onCancel = { navController.popBackStack() }
             )
         }
 
@@ -132,6 +132,26 @@ fun KidsNavHost(
             val kidId = backStackEntry.arguments?.getString("kidId")?.toLongOrNull() ?: return@composable
             MoodCalendarScreen(
                 kidId = kidId,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = "${KidsDestinations.ACADEMIC}/{kidId}?grade={grade}",
+            arguments = listOf(
+                navArgument("kidId") { type = NavType.LongType },
+                navArgument("grade") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            )
+        ) { backStackEntry ->
+            val kidId = backStackEntry.arguments?.getLong("kidId") ?: return@composable
+            val grade = backStackEntry.arguments?.getString("grade")
+            AcademicRecordScreen(
+                kidId = kidId,
+                initialGrade = grade,
                 onBack = { navController.popBackStack() }
             )
         }
